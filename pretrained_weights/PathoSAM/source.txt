@@ -1,0 +1,8 @@
+https://github.com/computational-cell-analytics/patho-sam/
+Paper: https://openreview.net/forum?id=EWGV97ESaP [MIDL 2025 Oral]
+
+The weights are found elsewhere!
+Reponse from the author:
+
+You can find the PathoSAM pretraned weights at https://github.com/computational-cell-analytics/micro-sam/blob/master/micro_sam/util.py#L150-L152, and the additional instance segmentation decoder weights at https://github.com/computational-cell-analytics/micro-sam/blob/master/micro_sam/util.py#L163-L165 (see more info in our publication about the additional decoder: https://arxiv.org/abs/2502.00408).
+Normalisation: SA-1B statistics, i.e. the SAM-style one!

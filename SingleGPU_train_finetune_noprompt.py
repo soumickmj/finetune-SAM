@@ -19,6 +19,7 @@ from torchvision import transforms
 from PIL import Image
 #Others
 from torch.utils.data import DataLoader, Subset
+from torchvision.transforms import InterpolationMode
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import copy
@@ -88,7 +89,7 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
         train_loss = 0
         for i,data in enumerate(tqdm(trainloader)):
             imgs = data['image'].cuda()
-            msks = torchvision.transforms.Resize((args.out_size,args.out_size))(data['mask'])
+            msks = torchvision.transforms.Resize((args.out_size,args.out_size),InterpolationMode.NEAREST)(data['mask'])
             msks = msks.cuda()
 
             if args.if_update_encoder:
@@ -110,6 +111,9 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
                             dense_prompt_embeddings=dense_emb, 
                             multimask_output=True,
                           )
+            if pred.shape[-2:] != msks.shape[-2:]: #SAM's output is always 256x256, resize it to the original size
+                pred = F.interpolate(pred, size=msks.shape[-2:], mode='bilinear')
+
             loss_dice = criterion1(pred,msks.float()) 
             loss_ce = criterion2(pred,torch.squeeze(msks.long(),1))
             loss =  loss_dice + loss_ce
@@ -150,7 +154,7 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
             with torch.no_grad():
                 for i,data in enumerate(tqdm(valloader)):
                     imgs = data['image'].cuda()
-                    msks = torchvision.transforms.Resize((args.out_size,args.out_size))(data['mask'])
+                    msks = torchvision.transforms.Resize((args.out_size,args.out_size),InterpolationMode.NEAREST)(data['mask'])
                     msks = msks.cuda()
 
                     img_emb= sam.image_encoder(imgs)
@@ -166,6 +170,9 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
                                     dense_prompt_embeddings=dense_emb, 
                                     multimask_output=True,
                                   )
+                    if pred.shape[-2:] != msks.shape[-2:]: #SAM's output is always 256x256, resize it to the original size
+                        pred = F.interpolate(pred, size=msks.shape[-2:], mode='bilinear')
+                        
                     loss = criterion1(pred,msks.float()) + criterion2(pred,torch.squeeze(msks.long(),1))
                     eval_loss +=loss.item()
                     dsc_batch = dice_coeff_multi_class(pred.argmax(dim=1).cpu(), torch.squeeze(msks.long(),1).cpu().long(),args.num_cls)
@@ -196,10 +203,12 @@ if __name__ == "__main__":
     print('train dataset: {}'.format(dataset_name)) 
     train_img_list = args.train_img_list
     val_img_list = args.val_img_list
-    
+
+    args.dir_checkpoint = os.path.join(args.dir_checkpoint, dataset_name + "_" + args.run_tag)
+
     num_workers = 8
     if_vis = True
-    Path(args.dir_checkpoint).mkdir(parents=True,exist_ok = True)
+    Path(args.dir_checkpoint).mkdir(parents=True, exist_ok=True)
     path_to_json = os.path.join(args.dir_checkpoint, "args.json")
     args_dict = vars(args)
     with open(path_to_json, 'w') as json_file:

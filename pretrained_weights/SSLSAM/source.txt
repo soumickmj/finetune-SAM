@@ -1,0 +1,6 @@
+https://github.com/mazurowski-lab/finetune-SAM
+Paper: https://www.melba-journal.org/papers/2025:006.html [MELBA]
+
+The weights can be downloaded from: https://drive.google.com/drive/folders/1JAoy-Mh5QgxXsjWtQhMjOX16dN1kytLQ
+
+The method was "maybe" trained normalising the images individually using the SA-1B statistics.

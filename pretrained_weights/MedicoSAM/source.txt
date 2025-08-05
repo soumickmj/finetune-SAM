@@ -1,0 +1,7 @@
+https://github.com/computational-cell-analytics/medico-sam
+Paper: https://arxiv.org/abs/2501.11734
+
+The weights can be downloaded using:
+wget https://owncloud.gwdg.de/index.php/s/AB69HGhj8wuozXQ/download -O vit_b_medicosam.pt
+
+The method was trained normalising the images individually using the SA-1B statistics, i.e. the SAM-style one!

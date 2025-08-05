@@ -1,5 +1,14 @@
 import argparse
 
+label_mapping_ukbabd = {
+    'liver': 1,
+    'gallbladder': 2,
+    'kidney': 3,
+    'pancreas': 4,
+    'aorta': 5,
+    'spleen': 6
+}
+
 def parse_args():    
     parser = argparse.ArgumentParser()
     parser.add_argument('-net', type=str, default='sam', help='net type')
@@ -7,11 +16,11 @@ def parse_args():
     parser.add_argument('-baseline', type=str, default='unet', help='baseline net type')
     parser.add_argument('-dataset_name', type=str, default='MRI-Prostate', help='the name of dataset to be finetuned')
     
-    parser.add_argument('-img_folder', type=str, default='./datasets/', help='the folder putting images')
-    parser.add_argument('-mask_folder', type=str, default='./datasets/', help='the folder putting masks')
-    parser.add_argument('-train_img_list', type=str, default='./datasets/train.csv')
-    parser.add_argument('-val_img_list', type=str,default='./datasets/val.csv')
-    parser.add_argument('-targets', type=str,default='combine_all')
+    parser.add_argument('-img_folder', type=str, default='', help='the folder putting images')
+    parser.add_argument('-mask_folder', type=str, default='', help='the folder putting masks')
+    parser.add_argument('-train_img_list', type=str, default='')
+    parser.add_argument('-val_img_list', type=str,default='')
+    parser.add_argument('-targets', type=str,default='liver')
 
     parser.add_argument('-finetune_type', type=str, default='adapter', help='normalization type, pick among vanilla,adapter,lora')
     parser.add_argument('-normalize_type', type=str, default='sam', help='normalization type, pick between sam or medsam')
@@ -40,7 +49,7 @@ def parse_args():
     parser.add_argument('-w', type=int, default=4, help='number of workers for dataloader')
     parser.add_argument('-b', type=int, default=4, help='batch size for dataloader')
     parser.add_argument('-s', type=bool, default=True, help='whether shuffle the dataset')
-    parser.add_argument('-if_warmup', type=bool, default=False, help='if warm up training phase')
+    parser.add_argument('-if_warmup', type=bool, default=True, help='if warm up training phase')
     parser.add_argument('-warmup_period', type=int, default=200, help='warm up training phase')
     parser.add_argument('-lr', type=float, default=1e-3, help='initial learning rate')
     parser.add_argument('-uinch', type=int, default=1, help='input channel of unet')
@@ -55,16 +64,16 @@ def parse_args():
     parser.add_argument('-num_sample', type=int, default=4 , help='sample pos and neg')
     parser.add_argument('-roi_size', type=int, default=96 , help='resolution of roi')
 
-    parser.add_argument('-if_update_encoder', type=bool, default=False , help='if update_image_encoder')
+    parser.add_argument('-if_update_encoder', type=bool, default=True , help='if update_image_encoder')
     parser.add_argument('-if_encoder_adapter', type=bool, default=False , help='if add adapter to encoder')
     
-    parser.add_argument('-encoder-adapter-depths', type=list, default=[0,1,10,11] , help='the depth of blocks to add adapter')
+    parser.add_argument('-encoder-adapter-depths', type=list, default=list(range(0,12)) , help='the depth of blocks to add adapter')
     parser.add_argument('-if_mask_decoder_adapter', type=bool, default=False , help='if add adapter to mask decoder')
     parser.add_argument('-decoder_adapt_depth', type=int, default=2, help='the depth of the decoder adapter')
     
     parser.add_argument('-if_encoder_lora_layer', type=bool, default=False , help='if add lora to encoder')
     parser.add_argument('-if_decoder_lora_layer', type=bool, default=False , help='if add lora to decoder')
-    parser.add_argument('-encoder_lora_layer', type=list, default=[0,1,10,11] , help='the depth of blocks to add lora, if [], it will add at each layer')
+    parser.add_argument('-encoder_lora_layer', type=list, default=[] , help='the depth of blocks to add lora, if [], it will add at each layer')
     
     parser.add_argument('-if_split_encoder_gpus', type=bool, default=False , help='if split encoder to multiple gpus')
     parser.add_argument('-devices', type=list, default=[0,1] , help='if split encoder to multiple gpus')
@@ -72,6 +81,19 @@ def parse_args():
     
   
     parser.add_argument('-evl_chunk', type=int, default=None , help='evaluation chunk')
+    
+    #added by Soumick
+    parser.add_argument('-run_tag', type=str, default="" , help='tag to append to the run name')
+    parser.add_argument('-load_all', type=bool, default=True, help='No prechecks of the masks will be performed, all masks will be loaded')
+    parser.add_argument('-slice_index', type=int, default=0 , help='slice/channel (last dim) index for 3D images')
+    parser.add_argument('-label_mapping', default="/group/glastonbury/soumick/dataset/ukbbnii/minisets/classlabel_mapping.pkl" , help='Path to the label mapping file. Leave empty for no mapping.')
+    parser.add_argument('-prenorm_type', type=str, default=None, help='pre-normalisation type for input images, pick between minmax, window. To do no pre-normalisation, set to None.')
+    parser.add_argument('-prenorm_window_min_percentile', type=int, default=1, help='min percentile for window normalization')
+    parser.add_argument('-prenorm_window_max_percentile', type=int, default=99, help='max percentile for window normalization')
+    parser.add_argument('-test_img_list', type=str,default='', help='the list of test images, to be used only by val_finetune_noprompt.py')
+    parser.add_argument('-test_prefinetune', type=bool, default=False, help='whether to use pre-finetuning weights (i.e. sam_ckpt) for testing')
+    parser.add_argument('-seg_save_dir', type=str, default='', help='directory to save segmentation results')
+
     opt = parser.parse_args()
 
     return opt

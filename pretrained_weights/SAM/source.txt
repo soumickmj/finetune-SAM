@@ -1,0 +1,6 @@
+https://github.com/facebookresearch/segment-anything
+Paper: https://arxiv.org/abs/2304.02643
+
+The weights can be downloaded from their GitHub: https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints
+
+The method was trained normalising the images individually using the SA-1B statistics.

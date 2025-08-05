@@ -16,6 +16,7 @@ import einops
 from utils.funcs import *
 from torchvision.transforms import InterpolationMode
 #from .utils.transforms import ResizeLongestSide
+from utils.process_img import get_images
 
 class Public_dataset(Dataset):
     def __init__(self,args, img_folder, mask_folder, img_list,phase='train',sample_num=50,channel_num=1,normalize_type='sam',crop=False,crop_size=1024,targets=['femur','hip'],part_list=['all'],cls=-1,if_prompt=True,prompt_type='point',region_type='largest_3',label_mapping=None,if_spatial=True,delete_empty_masks=True):
@@ -56,6 +57,8 @@ class Public_dataset(Dataset):
     def load_label_mapping(self):
         # Load the predefined label mappings from a pickle file
         # the format is {'label_name1':cls_idx1, 'label_name2':,cls_idx2}
+        if self.label_mapping is None and bool(self.args.label_mapping):
+            self.label_mapping = self.args.label_mapping
         if self.label_mapping:
             with open(self.label_mapping, 'rb') as handle:
                 self.segment_names_to_labels = pickle.load(handle)
@@ -65,8 +68,11 @@ class Public_dataset(Dataset):
         else:
             self.segment_names_to_labels = {}
             self.label_dic = {value: 'all' for value in range(1, 256)}
-        
 
+        if not ('combine_all' in self.targets or 'multi_all' in self.targets):
+            self.target_classes = np.array([self.segment_names_to_labels[target] for target in self.targets if target in self.segment_names_to_labels], dtype=int)
+
+    
     def load_data_list(self, img_list):
         """
         Load and filter the data list based on the existence of the mask and its relevance to the specified parts and targets.
@@ -74,13 +80,16 @@ class Public_dataset(Dataset):
         with open(img_list, 'r') as file:
             lines = file.read().strip().split('\n')
         for line in lines:
-            img_path, mask_path = line.split(',')
-            mask_path = mask_path.strip()
-            if mask_path.startswith('/'):
-                mask_path = mask_path[1:]
-            msk = Image.open(os.path.join(self.mask_folder, mask_path)).convert('L')
-            if self.should_keep(msk, mask_path):
+            if self.args.load_all or line.endswith('.nii.gz'): #for nifti files, let's assume we will keep all the masks
                 self.data_list.append(line)
+            else:
+                img_path, mask_path = line.split(',')
+                mask_path = mask_path.strip()
+                if mask_path.startswith('/'):
+                    mask_path = mask_path[1:]
+                msk = Image.open(os.path.join(self.mask_folder, mask_path)).convert('L')
+                if self.should_keep(msk, mask_path):
+                    self.data_list.append(line)
 
         print(f'Filtered data list to {len(self.data_list)} entries.')
 
@@ -124,16 +133,31 @@ class Public_dataset(Dataset):
             transformations.append(transforms.Lambda(lambda x: (x - torch.min(x)) / (torch.max(x) - torch.min(x))))
         self.transform_img = transforms.Compose(transformations)
 
+    def filter_mask_by_target_classes(self, mask_array):
+        mask = np.isin(mask_array, self.target_classes)
+        return mask_array * mask
+
     def __len__(self):
         return len(self.data_list)
 
     def __getitem__(self, index):
         data = self.data_list[index]
         img_path, mask_path = data.split(',')
-        if mask_path.startswith('/'):
-            mask_path = mask_path[1:]
-        img = Image.open(os.path.join(self.img_folder, img_path.strip())).convert('RGB')
-        msk = Image.open(os.path.join(self.mask_folder, mask_path.strip())).convert('L')
+
+        if img_path.endswith('.nii.gz'): #we have nifti files
+            img_path = img_path.strip()
+            mask_path = mask_path.strip()
+            img, msk = get_images(pth_img=img_path, pth_lbl=mask_path, slice_index=self.args.slice_index, norm_type=self.args.prenorm_type, window_min_percentile=self.args.prenorm_window_min_percentile, window_max_percentile=self.args.prenorm_window_max_percentile)
+            if not ('combine_all' in self.targets or 'multi_all' in self.targets):
+                msk = self.filter_mask_by_target_classes(msk)
+            img = Image.fromarray(img).convert('RGB')
+            msk = Image.fromarray(msk).convert('L')
+        else:
+            if bool(self.mask_folder):
+                if mask_path.startswith('/'):
+                    mask_path = mask_path[1:]
+            img = Image.open(os.path.join(self.img_folder, img_path.strip())).convert('RGB')
+            msk = Image.open(os.path.join(self.mask_folder, mask_path.strip())).convert('L')
 
         img = transforms.Resize((self.args.image_size,self.args.image_size))(img)
         msk = transforms.Resize((self.args.image_size,self.args.image_size),InterpolationMode.NEAREST)(msk)
@@ -172,8 +196,9 @@ class Public_dataset(Dataset):
 
     def prepare_output(self, img, msk, img_path, mask_path):
         if len(msk.shape)==2:
-            msk = torch.unsqueeze(torch.tensor(msk,dtype=torch.long),0)
-        output = {'image': img, 'mask': msk, 'img_name': img_path}
+            # msk = torch.unsqueeze(torch.tensor(msk,dtype=torch.long),0)
+            msk = torch.unsqueeze(msk.clone(), 0).long() #due to UserWarning
+        output = {'image': img, 'mask': msk, 'img_name': os.path.basename(img_path)}
         if self.if_prompt:
             # Assuming get_first_prompt and get_top_boxes functions are defined and handle prompt creation
             if self.prompt_type == 'point':

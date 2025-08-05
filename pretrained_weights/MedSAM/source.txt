@@ -1,0 +1,6 @@
+https://github.com/bowang-lab/MedSAM
+Paper: https://www.nature.com/articles/s41467-024-44824-z [Nat. Com.]
+
+The weights can be downloaded from: https://drive.google.com/drive/folders/1ETWmi4AiniJeWOt6HAsYgTjYv_fkgzoN
+
+The method was trained normalising the images individually between 0 and 1 using Min-Max normalisation, then multiplied by 255.
