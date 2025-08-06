@@ -109,3 +109,5 @@ def prepare_args(args):
     args.dir_checkpoint = os.path.join(args.dir_checkpoint, args.dataset_name + "_" + args.run_tag)
     if args.targets:
         args.targets = args.targets.split(',')
+        assert args.num_cls == len(args.targets) + 1, "num_cls should be equal to the number of targets + 1 (for background)"
+    return args

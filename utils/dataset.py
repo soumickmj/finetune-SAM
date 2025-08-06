@@ -62,16 +62,39 @@ class Public_dataset(Dataset):
         if self.label_mapping:
             with open(self.label_mapping, 'rb') as handle:
                 self.segment_names_to_labels = pickle.load(handle)
-            self.label_dic = {seg[1]: seg[0] for seg in self.segment_names_to_labels}
-            self.label_name_list = [seg[0] for seg in self.segment_names_to_labels]
-            print(self.label_dic)
+
+            if bool(self.targets):
+                self.segment_names_to_labels = {name: idx for name, idx in self.segment_names_to_labels.items() if name in self.targets or name == 'background'}
+
+            self.label_dic = {}
+            for name, idx in self.segment_names_to_labels.items():
+                if idx not in self.label_dic:
+                    self.label_dic[idx] = []
+                self.label_dic[idx].append(name)
+            self.label_name_list = list(self.label_dic.keys())
+
+            try:
+                bg_name, bg_idx = next((name, idx) for name, idx in self.segment_names_to_labels.items() if 'background' in name.lower())
+            except StopIteration:
+                print("No explicit 'background' class found. Assigning index 0 as background.")
+                if 0 in self.segment_names_to_labels.values():
+                    raise ValueError(f"Ambiguous background: Index 0 is used by {self.label_dic.get(0)} but no class is named 'background'.")
+                bg_name, bg_idx = 'background', 0
+                self.segment_names_to_labels[bg_name] = bg_idx
+                self.label_dic[bg_idx] = [bg_name]
+            
+            fg_indices = sorted(list(set(idx for name, idx in self.segment_names_to_labels.items() if idx != bg_idx)))
+                            
+            self.remapping_dict = {bg_idx: 0}
+            for i, idx in enumerate(fg_indices):
+                self.remapping_dict[idx] = i + 1
+        
         else:
             self.segment_names_to_labels = {}
-            self.label_dic = {value: 'all' for value in range(1, 256)}
-
-        if not ('combine_all' in self.targets or 'multi_all' in self.targets):
-            self.target_classes = np.array([self.segment_names_to_labels[target] for target in self.targets if target in self.segment_names_to_labels], dtype=int)
-
+            self.remapping_dict = {i: i for i in range(self.args.num_cls)}
+            self.label_dic = {}
+        
+        self.mask_remapper = np.vectorize(lambda x: self.remapping_dict.get(x, 0), otypes=[np.uint8])
     
     def load_data_list(self, img_list):
         """
@@ -133,10 +156,6 @@ class Public_dataset(Dataset):
             transformations.append(transforms.Lambda(lambda x: (x - torch.min(x)) / (torch.max(x) - torch.min(x))))
         self.transform_img = transforms.Compose(transformations)
 
-    def filter_mask_by_target_classes(self, mask_array):
-        mask = np.isin(mask_array, self.target_classes)
-        return mask_array * mask
-
     def __len__(self):
         return len(self.data_list)
 
@@ -154,12 +173,9 @@ class Public_dataset(Dataset):
             img_msk = get_images(pth_img=img_path, pth_lbl=mask_path, slice_index=self.args.slice_index, norm_type=self.args.prenorm_type, window_min_percentile=self.args.prenorm_window_min_percentile, window_max_percentile=self.args.prenorm_window_max_percentile)
             if isinstance(img_msk, tuple):
                 img, msk = img_msk
-                if not ('combine_all' in self.targets or 'multi_all' in self.targets):
-                    msk = self.filter_mask_by_target_classes(msk)
-                msk = Image.fromarray(msk).convert('L')
             else:
                 img = img_msk
-                msk = Image.new('L', img.size, 0)
+                msk = np.zeros_like(img, dtype=np.uint8) #no mask provided, create a dummy/placeholder mask
             img = Image.fromarray(img).convert('RGB')            
         else:
             if bool(self.mask_folder):
@@ -167,9 +183,13 @@ class Public_dataset(Dataset):
                     mask_path = mask_path[1:]
             img = Image.open(os.path.join(self.img_folder, img_path.strip())).convert('RGB')
             if bool(mask_path):
-                msk = Image.open(os.path.join(self.mask_folder, mask_path.strip())).convert('L')
+                msk = np.asarray(Image.open(os.path.join(self.mask_folder, mask_path.strip())).convert('L'))
             else:
-                msk = Image.new('L', img.size, 0)
+                msk = np.zeros_like(img, dtype=np.uint8) #no mask provided, create a dummy/placeholder mask
+
+        if  np.any(msk) and (not ('combine_all' in self.targets or 'multi_all' in self.targets)):
+            msk = self.mask_remapper(msk)
+        msk = Image.fromarray(msk).convert('L')
 
         img = transforms.Resize((self.args.image_size,self.args.image_size))(img)
         msk = transforms.Resize((self.args.image_size,self.args.image_size),InterpolationMode.NEAREST)(msk)
