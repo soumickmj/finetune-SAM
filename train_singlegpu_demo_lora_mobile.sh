@@ -19,17 +19,17 @@ dir_checkpoint="2D-SAM_${arch}_decoder_${finetune_type}_${dataset_name}_noprompt
 
 # Run the Python script
 python SingleGPU_train_finetune_noprompt.py \
-    -if_warmup True \
-    -finetune_type "$finetune_type" \
-    -arch "$arch" \
-    -if_update_encoder True \
-    -if_encoder_lora_layer True \
-    -if_decoder_lora_layer True \
-    -img_folder "$img_folder" \
-    -mask_folder "$img_folder" \
-    -sam_ckpt "mobile_sam.pt" \
-    -targets "$targets" \
-    -dataset_name "$dataset_name" \
-    -dir_checkpoint "$dir_checkpoint" \
-    -train_img_list "$train_img_list" \
-    -val_img_list "$val_img_list"
+    --if_warmup True \
+    --finetune_type "$finetune_type" \
+    --arch "$arch" \
+    --if_update_encoder True \
+    --if_encoder_lora_layer True \
+    --if_decoder_lora_layer True \
+    --img_folder "$img_folder" \
+    --mask_folder "$img_folder" \
+    --sam_ckpt "pretrained_weights/MobileSAM/mobile_sam.pt" \
+    --targets "$targets" \
+    --dataset_name "$dataset_name" \
+    --dir_checkpoint "$dir_checkpoint" \
+    --train_img_list "$train_img_list" \
+    --val_img_list "$val_img_list"

@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from torch import nn as nn
 from torch.autograd import Variable
 from torch.nn import MSELoss, SmoothL1Loss, L1Loss
+from monai.losses import DiceLoss as MONAIDice
 
 def compute_per_channel_dice(input, target, epsilon=1e-6, weight=None):
     """
@@ -307,3 +308,53 @@ def _create_loss(name, loss_config, weight, ignore_index, pos_weight):
                                     apply_below_threshold=loss_config.get('apply_below_threshold', True))
     else:
         raise RuntimeError(f"Unsupported loss function: '{name}'")
+
+## Added by Soumick
+
+class BoundaryLoss(nn.Module):
+    def __init__(self, num_classes: int = None):
+        """
+        Args:
+            num_classes (int): The number of classes in the segmentation task (including background).
+                               This is required for one-hot encoding the target mask.
+        """
+        super().__init__()
+        
+        if num_classes is None:
+            raise ValueError("num_classes must be provided for one-hot encoding.")
+            
+        self.num_classes = num_classes
+
+        self.boundary_criterion = MONAIDice(softmax=False, to_onehot_y=False, squared_pred=True)
+
+    def _mask_to_boundary(self, mask: torch.Tensor, kernel_size: int = 3) -> torch.Tensor:
+        """
+        Computes the boundary of a segmentation mask using morphological erosion on the GPU.
+        """
+        padding = (kernel_size - 1) // 2
+        # Use max-pooling on the inverted mask to perform erosion
+        eroded_mask = F.max_pool2d(
+            1 - mask, 
+            kernel_size=kernel_size, 
+            stride=1,
+            padding=padding
+        )
+        eroded_mask = 1 - eroded_mask
+        
+        # Boundary is the original mask minus its eroded version
+        boundary = mask - eroded_mask
+        return boundary
+
+    def forward(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        # 1. Pre-process inputs to get probability maps and one-hot targets
+        pred_probs = torch.softmax(predictions, dim=1)
+        gt_one_hot = F.one_hot(targets.squeeze(1).long(), num_classes=self.num_classes).permute(0, 3, 1, 2).float()
+        
+        # 2. Compute the boundary maps
+        pred_boundary = self._mask_to_boundary(pred_probs)
+        gt_boundary = self._mask_to_boundary(gt_one_hot)
+        
+        # 3. Calculate the loss based on dice
+        loss = self.boundary_criterion(pred_boundary, gt_boundary)
+            
+        return loss

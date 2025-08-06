@@ -2,11 +2,13 @@
 
 # Define the parameter values in arrays
 # dsID_list=("Crops" "Tiles")
-dsID_list=("Tiles")
+dsID_list=("Crops")
 
 splitTag_list=("Big" "Small")
+# splitTag_list=("Biggest")
 
-init_mode_list=("SAM" "MedSAM" "PathoSAM")
+# init_mode_list=("SAM" "MedSAM" "PathoSAM")
+init_mode_list=("SAM" "PathoSAM")
 # init_mode_list=("PathoSAM")
 
 peft_mode_list=("adapter" "lora")
@@ -32,7 +34,7 @@ for dsID in "${dsID_list[@]}"; do
         # 1. Build the command in an array for safe execution
         cmd=(
             sbatch 
-            -J "resrun_${job_name}" 
+            -J "${job_name}" 
             traintest_singlegpu_AlexPlasmaCells.sh 
             --expID "${expID}"
             --dsID "${dsID}" 

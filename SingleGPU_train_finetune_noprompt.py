@@ -28,7 +28,7 @@ import torch.nn.functional as F
 from torch.nn.functional import one_hot
 from pathlib import Path
 from tqdm import tqdm
-from utils.losses import DiceLoss
+from utils.losses import BoundaryLoss
 from utils.dsc import dice_coeff_multi_class
 import cv2
 import monai
@@ -74,8 +74,43 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
     optimizer = optim.AdamW(sam.parameters(), lr=b_lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.1, amsgrad=False)
     optimizer.zero_grad()
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5) #learning rate decay
-    criterion1 = monai.losses.DiceLoss(sigmoid=True, squared_pred=True, to_onehot_y=True,reduction='mean')
-    criterion2 = nn.CrossEntropyLoss()
+
+    if args.loss_mode == -1:
+        criterion1 = monai.losses.DiceLoss(include_background=args.include_background_loss, 
+                                           sigmoid=True, # in theory, should be softmax=True, not sure why sigmoid=True was used in the original code
+                                           squared_pred=True, 
+                                           to_onehot_y=True,
+                                           reduction='mean')
+        criterion2 = nn.CrossEntropyLoss()
+    elif args.loss_mode == 0:
+        criterion1 = monai.losses.DiceLoss(include_background=args.include_background_loss, 
+                                           softmax=True, # changed from sigmoid=True to softmax=True, the original functionalitiy can be achieved by supplying args.loss_mode = -1
+                                           squared_pred=True, 
+                                           to_onehot_y=True,
+                                           reduction='mean')
+        criterion2 = nn.CrossEntropyLoss()
+    elif args.loss_mode == 1:
+        criterion = monai.losses.DiceFocalLoss(include_background=args.include_background_loss, 
+                                               to_onehot_y=True,
+                                               softmax=True, # sigmoid=True was used in the original code
+                                               gamma=2.0,
+                                               squared_pred=True, 
+                                               reduction='mean')
+    elif args.loss_mode == 2:
+        criterion1 = monai.losses.TverskyLoss(include_background=args.include_background_loss,
+                                               to_onehot_y=True,
+                                               softmax=True, # sigmoid=True was used in the original code
+                                               alpha=0.5,
+                                               beta=0.5,
+                                               reduction='mean')
+        criterion2 = monai.losses.FocalLoss(include_background=args.include_background_loss,
+                                             to_onehot_y=True,
+                                             use_softmax=True, # sigmoid=True was used in the original code
+                                             gamma=2.0,
+                                             reduction='mean')
+    
+    if args.add_boundary_loss:
+        criterion_boundary = BoundaryLoss(num_classes=args.num_cls)
     
     iter_num = 0
     max_iterations = epochs * len(trainloader) 
@@ -83,6 +118,7 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
     
     pbar = tqdm(range(epochs))
     val_largest_dsc = 0
+    val_lowest_loss = float('inf')
     last_update_epoch = 0
     for epoch in pbar:
         sam.train()
@@ -113,10 +149,22 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
                           )
             if pred.shape[-2:] != msks.shape[-2:]: #SAM's output is always 256x256, resize it to the original size
                 pred = F.interpolate(pred, size=msks.shape[-2:], mode='bilinear')
+            
+            if args.loss_mode in [-1, 0]:
+                loss_dice = criterion1(pred, msks) 
+                loss_ce = criterion2(pred, torch.squeeze(msks, 1))
+                loss =  loss_dice + loss_ce
+            elif args.loss_mode == 1:
+                loss = criterion(pred, msks)
+                loss_dice = loss_ce = loss
+            elif args.loss_mode == 2:
+                loss_dice = criterion1(pred, msks)
+                loss_ce = criterion2(pred, msks)
+                loss = loss_dice + loss_ce
 
-            loss_dice = criterion1(pred,msks.float()) 
-            loss_ce = criterion2(pred,torch.squeeze(msks.long(),1))
-            loss =  loss_dice + loss_ce
+            if args.add_boundary_loss:
+                loss_boundary = criterion_boundary(pred, msks)
+                loss += loss_boundary
             
             loss.backward()
             optimizer.step()
@@ -143,6 +191,8 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
             writer.add_scalar('info/total_loss', loss, iter_num)
             writer.add_scalar('info/loss_ce', loss_ce, iter_num)
             writer.add_scalar('info/loss_dice', loss_dice, iter_num)
+            if args.add_boundary_loss:
+                writer.add_scalar('info/loss_boundary', loss_boundary, iter_num)
 
         train_loss /= (i+1)
         pbar.set_description('Epoch num {}| train loss {} \n'.format(epoch,train_loss))
@@ -172,10 +222,19 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
                                   )
                     if pred.shape[-2:] != msks.shape[-2:]: #SAM's output is always 256x256, resize it to the original size
                         pred = F.interpolate(pred, size=msks.shape[-2:], mode='bilinear')
-                        
-                    loss = criterion1(pred,msks.float()) + criterion2(pred,torch.squeeze(msks.long(),1))
+
+                    if args.loss_mode in [-1, 0]:
+                        loss = criterion1(pred, msks.float()) + criterion2(pred, torch.squeeze(msks, 1))
+                    elif args.loss_mode == 1:
+                        loss = criterion(pred, msks)
+                    elif args.loss_mode == 2:
+                        loss = criterion1(pred, msks) + criterion2(pred, msks)
+
+                    if args.add_boundary_loss:
+                        loss += criterion_boundary(pred, msks)
+
                     eval_loss +=loss.item()
-                    dsc_batch = dice_coeff_multi_class(pred.argmax(dim=1).cpu(), torch.squeeze(msks.long(),1).cpu().long(),args.num_cls)
+                    dsc_batch = dice_coeff_multi_class(pred.argmax(dim=1).cpu(), torch.squeeze(msks,1).cpu(),args.num_cls)
                     dsc+=dsc_batch
 
                 eval_loss /= (i+1)
@@ -185,15 +244,27 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
                 writer.add_scalar('eval/dice', dsc, epoch)
                 
                 print('Eval Epoch num {} | val loss {} | dsc {} \n'.format(epoch,eval_loss,dsc))
-                if dsc>val_largest_dsc:
-                    val_largest_dsc = dsc
-                    last_update_epoch = epoch
-                    print('largest DSC now: {}'.format(dsc))
-                    torch.save(sam.state_dict(),dir_checkpoint + '/checkpoint_best.pth')
-                elif (epoch-last_update_epoch)>20:
-                    # the network haven't been updated for 20 epochs
-                    print('Training finished###########')
-                    break
+
+                if args.s:
+                    if dsc>val_largest_dsc:
+                        val_largest_dsc = dsc
+                        last_update_epoch = epoch
+                        print('largest DSC now: {}'.format(dsc))
+                        torch.save(sam.state_dict(),dir_checkpoint + '/checkpoint_best.pth')
+                    elif (epoch-last_update_epoch)>20:
+                        # the network haven't been updated for 20 epochs
+                        print('Training finished###########')
+                        break
+                else:
+                    if eval_loss < val_lowest_loss:
+                        val_lowest_loss = eval_loss
+                        last_update_epoch = epoch
+                        print('smallest loss now: {}'.format(eval_loss))
+                        torch.save(sam.state_dict(),dir_checkpoint + '/checkpoint_best.pth')
+                    elif (epoch-last_update_epoch)>20:
+                        # the network haven't been updated for 20 epochs
+                        print('Training finished###########')
+                        break
     writer.close()
                 
                 

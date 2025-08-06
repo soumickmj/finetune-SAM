@@ -167,3 +167,4 @@ wandb/*
 
 *.pt*
 checkpoints/*
+*.pyc

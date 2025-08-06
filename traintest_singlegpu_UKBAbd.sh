@@ -18,14 +18,15 @@ cd $SLURM_SUBMIT_DIR
 #read the different keyworded commandline arguments
 while [ $# -gt 0 ]; do
     if [[ $1 == "--help" ]]; then
-        usage
         exit 0
     elif [[ $1 == "--"* ]]; then
         v="${1/--/}"
-        declare "$v"="$2"                                                                                                       shift                                                                                                               fi
+        declare "$v"="$2"
+        shift
+        shift
+    else
         shift
     fi
-    shift
 done                                                 
 
 #set the default values for the commandline arguments
@@ -190,43 +191,56 @@ echo "----------------------------------------------------------------------"
 # Setup the env
 source /home/${USER}/.bashrc
 
+# Function to convert boolean values to argument format for BooleanOptionalAction
+bool_to_arg() {
+    local var_name="$1"
+    local var_value="$2"
+    if [ "$var_value" == "True" ]; then
+        echo "--$var_name"
+    elif [ "$var_value" == "False" ]; then
+        echo "--no-$var_name"
+    else
+        echo ""
+    fi
+}
+
 # Fine-tune the model
 srun poetry run python SingleGPU_train_finetune_noprompt.py \
-    -if_warmup True \
-    -targets "$targets" \
-    -arch "$arch" \
-    -dataset_name "$dataset_name" \
-    -train_img_list "$train_img_list" \
-    -val_img_list "$val_img_list" \
-    -slice_index "$slice_index" \
-    -prenorm_type "$prenorm_type" \
-    -prenorm_window_min_percentile "$prenorm_window_min_percentile" \
-    -prenorm_window_max_percentile "$prenorm_window_max_percentile" \
-    -out_size "$out_size" \
-    -num_cls "$num_cls" \
-    -normalize_type "$normalise_type" \
-    -sam_ckpt "$sam_ckpt" \
-    -finetune_type "$finetune_type" \
-    -if_encoder_adapter "$if_encoder_adapter" \
-    -if_mask_decoder_adapter "$if_mask_decoder_adapter" \
-    -if_encoder_lora_layer "$if_encoder_lora_layer" \
-    -if_decoder_lora_layer "$if_decoder_lora_layer" \
-    -lr "$lr" \
-    -b "$batch_size" \
-    -w "$num_workers" \
-    -run_tag "$run_tag"
+    $(bool_to_arg "if_warmup" "True") \
+    --targets "$targets" \
+    --arch "$arch" \
+    --dataset_name "$dataset_name" \
+    --train_img_list "$train_img_list" \
+    --val_img_list "$val_img_list" \
+    --slice_index "$slice_index" \
+    --prenorm_type "$prenorm_type" \
+    --prenorm_window_min_percentile "$prenorm_window_min_percentile" \
+    --prenorm_window_max_percentile "$prenorm_window_max_percentile" \
+    --out_size "$out_size" \
+    --num_cls "$num_cls" \
+    --normalize_type "$normalise_type" \
+    --sam_ckpt "$sam_ckpt" \
+    --finetune_type "$finetune_type" \
+    $(bool_to_arg "if_encoder_adapter" "$if_encoder_adapter") \
+    $(bool_to_arg "if_mask_decoder_adapter" "$if_mask_decoder_adapter") \
+    $(bool_to_arg "if_encoder_lora_layer" "$if_encoder_lora_layer") \
+    $(bool_to_arg "if_decoder_lora_layer" "$if_decoder_lora_layer") \
+    --lr "$lr" \
+    --b "$batch_size" \
+    --w "$num_workers" \
+    --run_tag "$run_tag"
 
 # Test before finetuning
 srun poetry run python val_finetune_noprompt.py \
-    -test_prefinetune True \
-    -dataset_name "$dataset_name" \
-    -test_img_list "$test_img_list" \
-    -seg_save_dir "${seg_save_dir/${run_tag}/prefinetune_${run_tag}}" \
-    -run_tag "$run_tag"
+    $(bool_to_arg "test_prefinetune" "True") \
+    --dataset_name "$dataset_name" \
+    --test_img_list "$test_img_list" \
+    --seg_save_dir "${seg_save_dir/${run_tag}/prefinetune_${run_tag}}" \
+    --run_tag "$run_tag"
 
 # Validate the fine-tuned model
 srun poetry run python val_finetune_noprompt.py \
-    -dataset_name "$dataset_name" \
-    -test_img_list "$test_img_list" \
-    -run_tag "$run_tag" \
-    -seg_save_dir "$seg_save_dir" 
+    --dataset_name "$dataset_name" \
+    --test_img_list "$test_img_list" \
+    --run_tag "$run_tag" \
+    --seg_save_dir "$seg_save_dir" 
