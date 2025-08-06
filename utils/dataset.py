@@ -141,23 +141,35 @@ class Public_dataset(Dataset):
         return len(self.data_list)
 
     def __getitem__(self, index):
-        data = self.data_list[index]
-        img_path, mask_path = data.split(',')
+        data = self.data_list[index].split(',')
+        if len(data) == 1: #there is no mask, only image
+            img_path = data[0]
+            mask_path = ''
+        else:
+            img_path, mask_path = data
 
         if img_path.endswith('.nii.gz'): #we have nifti files
             img_path = img_path.strip()
             mask_path = mask_path.strip()
-            img, msk = get_images(pth_img=img_path, pth_lbl=mask_path, slice_index=self.args.slice_index, norm_type=self.args.prenorm_type, window_min_percentile=self.args.prenorm_window_min_percentile, window_max_percentile=self.args.prenorm_window_max_percentile)
-            if not ('combine_all' in self.targets or 'multi_all' in self.targets):
-                msk = self.filter_mask_by_target_classes(msk)
-            img = Image.fromarray(img).convert('RGB')
-            msk = Image.fromarray(msk).convert('L')
+            img_msk = get_images(pth_img=img_path, pth_lbl=mask_path, slice_index=self.args.slice_index, norm_type=self.args.prenorm_type, window_min_percentile=self.args.prenorm_window_min_percentile, window_max_percentile=self.args.prenorm_window_max_percentile)
+            if isinstance(img_msk, tuple):
+                img, msk = img_msk
+                if not ('combine_all' in self.targets or 'multi_all' in self.targets):
+                    msk = self.filter_mask_by_target_classes(msk)
+                msk = Image.fromarray(msk).convert('L')
+            else:
+                img = img_msk
+                msk = Image.new('L', img.size, 0)
+            img = Image.fromarray(img).convert('RGB')            
         else:
             if bool(self.mask_folder):
                 if mask_path.startswith('/'):
                     mask_path = mask_path[1:]
             img = Image.open(os.path.join(self.img_folder, img_path.strip())).convert('RGB')
-            msk = Image.open(os.path.join(self.mask_folder, mask_path.strip())).convert('L')
+            if bool(mask_path):
+                msk = Image.open(os.path.join(self.mask_folder, mask_path.strip())).convert('L')
+            else:
+                msk = Image.new('L', img.size, 0)
 
         img = transforms.Resize((self.args.image_size,self.args.image_size))(img)
         msk = transforms.Resize((self.args.image_size,self.args.image_size),InterpolationMode.NEAREST)(msk)

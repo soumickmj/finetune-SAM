@@ -6,20 +6,20 @@ from skimage.morphology import remove_small_objects, binary_closing, disk
 from scipy.ndimage import binary_fill_holes
 import matplotlib
 
-def get_images(pth_img, pth_lbl=None, slice_index=None, norm_type=None, window_min_percentile=1, window_max_percentile=99):
+def get_images(pth_img, pth_lbl='', slice_index=None, norm_type=None, window_min_percentile=1, window_max_percentile=99):
     file_sitk = sitk.ReadImage(pth_img)
     image_data = sitk.GetArrayFromImage(file_sitk) #channel (or slice in 3D cases) first, then x, y. TODO: need to check when the data is more than 3D, e.g. 4D or 5D.
 
-    if pth_lbl is not None:
+    if bool(pth_lbl):
         file_sitk_lbl = sitk.ReadImage(pth_lbl)
         label_data = np.uint8(sitk.GetArrayFromImage(file_sitk_lbl)) #same shape as image_data, but with labels instead of intensities
         assert image_data.shape == label_data.shape, "Image and label data must have the same shape. Current shapes: image_data={}, label_data={}".format(image_data.shape, label_data.shape)
 
     assert len(image_data.shape) in [2, 3], "Image data must be 2D or 3D, as the function get_image isn't implemented for more. Current shape: {}".format(image_data.shape)
     
-    if slice_index is not None:
+    if bool(slice_index) and slice_index != -1:
         image_data = image_data[..., slice_index, :, :].squeeze()
-        if pth_lbl is not None:
+        if bool(pth_lbl):
             label_data = label_data[..., slice_index, :, :].squeeze()
 
     # Check if the last 2 dimensions are not identical and pad to make it a perfect square
@@ -37,7 +37,7 @@ def get_images(pth_img, pth_lbl=None, slice_index=None, norm_type=None, window_m
                                 ((pad_height//2, pad_height - pad_height//2), 
                                 (pad_width//2, pad_width - pad_width//2)), 
                                 mode='constant', constant_values=0)
-            if pth_lbl is not None:
+            if bool(pth_lbl):
                 label_data = np.pad(label_data, 
                                     ((pad_height//2, pad_height - pad_height//2), 
                                     (pad_width//2, pad_width - pad_width//2)), 
@@ -49,7 +49,7 @@ def get_images(pth_img, pth_lbl=None, slice_index=None, norm_type=None, window_m
                                 (pad_height//2, pad_height - pad_height//2), 
                                 (pad_width//2, pad_width - pad_width//2)), 
                                 mode='constant', constant_values=0)
-            if pth_lbl is not None:
+            if bool(pth_lbl):
                 label_data = np.pad(label_data, 
                                     ((0, 0), 
                                     (pad_height//2, pad_height - pad_height//2), 
@@ -70,7 +70,7 @@ def get_images(pth_img, pth_lbl=None, slice_index=None, norm_type=None, window_m
     else:
         image_data_pre = np.uint8(image_data * 255.0)
 
-    if pth_lbl is not None:
+    if bool(pth_lbl):
         return image_data_pre, label_data
     else:
         return image_data_pre
