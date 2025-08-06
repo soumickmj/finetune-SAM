@@ -1,4 +1,5 @@
 import argparse
+import os
 
 label_mapping_ukbabd = {
     'liver': 1,
@@ -103,3 +104,8 @@ def parse_args():
     opt = parser.parse_args()
 
     return opt
+
+def prepare_args(args):
+    args.dir_checkpoint = os.path.join(args.dir_checkpoint, args.dataset_name + "_" + args.run_tag)
+    if args.targets:
+        args.targets = args.targets.split(',')

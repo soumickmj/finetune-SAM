@@ -39,7 +39,7 @@ from utils.process_img import save_image, create_overlay
 
 def main(args,test_image_list):
     # change to 'combine_all' if you want to combine all targets into 1 cls
-    test_dataset = Public_dataset(args,args.img_folder, args.mask_folder, test_image_list,phase='val',targets=[args.targets],if_prompt=False)
+    test_dataset = Public_dataset(args,args.img_folder, args.mask_folder, test_image_list,phase='val',targets=args.targets,if_prompt=False)
     testloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1)
     
     if args.test_prefinetune:
@@ -132,13 +132,11 @@ def main(args,test_image_list):
     print('class iou:',class_iou)
 
 if __name__ == "__main__":
-    args = cfg.parse_args()
+    args = cfg.prepare_args(cfg.parse_args())
 
     dataset_name = args.dataset_name
     print('train dataset: {}'.format(dataset_name))
     
-    args.dir_checkpoint = os.path.join(args.dir_checkpoint, dataset_name + "_" + args.run_tag)
-
     args_path = f"{args.dir_checkpoint}/args.json"
 
     # Reading the args from the json file

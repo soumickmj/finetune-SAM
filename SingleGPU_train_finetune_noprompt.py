@@ -36,7 +36,7 @@ from utils.utils import vis_image
 import cfg
 import json
 # Use the arguments
-args = cfg.parse_args()
+args = cfg.prepare_args(cfg.parse_args())
 # you need to modify based on the layer of adapters you are choosing to add
 # comment it if you are not using adapter
 #args.encoder_adapter_depths = [0,1,2,3]
@@ -275,9 +275,7 @@ if __name__ == "__main__":
     train_img_list = args.train_img_list
     val_img_list = args.val_img_list
 
-    args.dir_checkpoint = os.path.join(args.dir_checkpoint, dataset_name + "_" + args.run_tag)
-
-    num_workers = 8
+    num_workers = args.w
     if_vis = True
     Path(args.dir_checkpoint).mkdir(parents=True, exist_ok=True)
     path_to_json = os.path.join(args.dir_checkpoint, "args.json")
@@ -286,8 +284,8 @@ if __name__ == "__main__":
         json.dump(args_dict, json_file, indent=4)
     print(args.targets)
 
-    train_dataset = Public_dataset(args,args.img_folder, args.mask_folder, train_img_list,phase='train',targets=[args.targets],normalize_type='sam',if_prompt=False)
-    eval_dataset = Public_dataset(args,args.img_folder, args.mask_folder, val_img_list,phase='val',targets=[args.targets],normalize_type='sam',if_prompt=False)
+    train_dataset = Public_dataset(args,args.img_folder, args.mask_folder, train_img_list,phase='train',targets=args.targets,normalize_type='sam',if_prompt=False)
+    eval_dataset = Public_dataset(args,args.img_folder, args.mask_folder, val_img_list,phase='val',targets=args.targets,normalize_type='sam',if_prompt=False)
     trainloader = DataLoader(train_dataset, batch_size=args.b, shuffle=True, num_workers=num_workers)
     valloader = DataLoader(eval_dataset, batch_size=args.b, shuffle=False, num_workers=num_workers)
 
