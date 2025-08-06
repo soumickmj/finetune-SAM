@@ -1,5 +1,8 @@
 import argparse
 import os
+import random
+import numpy as np
+import torch
 
 label_mapping_ukbabd = {
     'liver': 1,
@@ -12,6 +15,8 @@ label_mapping_ukbabd = {
 
 def parse_args():    
     parser = argparse.ArgumentParser()
+    parser.add_argument('--seed', type=int, default=1701, help='random seed for reproducibility')
+
     parser.add_argument('--net', type=str, default='sam', help='net type')
     parser.add_argument('--arch', type=str, default='vit_b', help='net architecture, pick between vit_h, vit_b, vit_t')
     parser.add_argument('--baseline', type=str, default='unet', help='baseline net type')
@@ -111,3 +116,18 @@ def prepare_args(args):
         args.targets = args.targets.split(',')
         assert args.num_cls == len(args.targets) + 1, "num_cls should be equal to the number of targets + 1 (for background)"
     return args
+
+def set_seed(seed=1701):
+    # PyTorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # For multi-GPU setups
+    
+    # NumPy
+    np.random.seed(seed)
+    
+    # Python random
+    random.seed(seed)
+    
+    # OS environment variables
+    os.environ['PYTHONHASHSEED'] = str(seed)

@@ -35,8 +35,10 @@ import monai
 from utils.utils import vis_image
 import cfg
 import json
+
 # Use the arguments
 args = cfg.prepare_args(cfg.parse_args())
+cfg.set_seed(args.seed)  # Set a fixed seed for reproducibility
 # you need to modify based on the layer of adapters you are choosing to add
 # comment it if you are not using adapter
 #args.encoder_adapter_depths = [0,1,2,3]

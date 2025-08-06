@@ -37,6 +37,8 @@ from argparse import Namespace
 import json
 from utils.process_img import save_image, create_overlay
 
+cfg.set_seed(1701)  # Set a fixed seed for reproducibility
+
 def main(args,test_image_list):
     # change to 'combine_all' if you want to combine all targets into 1 cls
     test_dataset = Public_dataset(args,args.img_folder, args.mask_folder, test_image_list,phase='val',targets=args.targets,if_prompt=False)
@@ -133,6 +135,7 @@ def main(args,test_image_list):
 
 if __name__ == "__main__":
     args = cfg.prepare_args(cfg.parse_args())
+    cfg.set_seed(args.seed)  # Set a fixed seed for reproducibility (again, to use the supplied seed)
 
     dataset_name = args.dataset_name
     print('train dataset: {}'.format(dataset_name))
@@ -149,5 +152,8 @@ if __name__ == "__main__":
     args_orig.seg_save_dir = args.seg_save_dir
     args_orig.test_prefinetune = args.test_prefinetune
     args_orig.test_tag = args.test_tag
+    
+    if args_orig.seed != args.seed:
+        print(f"Warning: The seed in the config file ({args_orig.seed}) does not match the one provided ({args.seed}). Using the provided seed.")
 
     main(args_orig, args_orig.test_img_list)
