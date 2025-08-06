@@ -170,7 +170,7 @@ bool_to_arg() {
     fi
 }
 
-# # Fine-tune the model
+# Fine-tune the model
 srun poetry run python SingleGPU_train_finetune_noprompt.py \
     $(bool_to_arg "if_warmup" "True") \
     --label_mapping "" \
@@ -215,8 +215,8 @@ srun poetry run python val_finetune_noprompt.py \
 
 # Additional inference on unseen images
 srun poetry run python val_finetune_noprompt.py \
-    -test_tag "$test_tag" \
-    -dataset_name "$dataset_name" \
-    -test_img_list "$additional_infer_img_list" \
-    -run_tag "$run_tag" \
-    -dir_checkpoint "$dsRoot/checkpoints" \
+    --test_tag "$test_tag" \
+    --dataset_name "$dataset_name" \
+    --test_img_list "$additional_infer_img_list" \
+    --run_tag "$run_tag" \
+    --dir_checkpoint "$dsRoot/checkpoints" \

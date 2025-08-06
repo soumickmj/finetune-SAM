@@ -41,12 +41,6 @@ peft_mode="${peft_mode:-adapter}"
 batch_size="${batch_size:-3}"
 num_workers="${num_workers:-3}"
 
-#check if targets == liver. If not, crash
-if [[ "$targets" != "liver" ]]; then
-    echo "Error: targets must be set to 'liver' for now. I didn't implement the other options. Also, the model won't work for a class ID other than 1 (i.e. liver) because they aren't in order in the mask. Need to fix it."
-    exit 1
-fi
-
 # Fixed params
 arch="vit_b"
 

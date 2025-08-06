@@ -52,6 +52,7 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
         b_lr = args.lr
     
     sam = sam_model_registry[args.arch](args,checkpoint=os.path.join(args.sam_ckpt),num_classes=args.num_cls)
+    print('Using SAM model:', args.arch, 'with checkpoint:', args.sam_ckpt, 'finetuning with:', args.finetune_type)
     if args.finetune_type == 'adapter':
         for n, value in sam.named_parameters():
             if "Adapter" not in n: # only update parameters in adapter
@@ -247,7 +248,7 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
                 
                 print('Eval Epoch num {} | val loss {} | dsc {} \n'.format(epoch,eval_loss,dsc))
 
-                if args.s:
+                if args.val_dsc_monitor:
                     if dsc>val_largest_dsc:
                         val_largest_dsc = dsc
                         last_update_epoch = epoch
