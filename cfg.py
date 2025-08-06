@@ -85,13 +85,14 @@ def parse_args():
     #added by Soumick
     parser.add_argument('-run_tag', type=str, default="" , help='tag to append to the run name')
     parser.add_argument('-load_all', type=bool, default=True, help='No prechecks of the masks will be performed, all masks will be loaded')
-    parser.add_argument('-slice_index', type=int, default=0 , help='slice/channel (last dim) index for 3D images')
+    parser.add_argument('-slice_index', type=int, default=-1, help='slice/channel (last dim) index for 3D images')
     parser.add_argument('-label_mapping', default="/group/glastonbury/soumick/dataset/ukbbnii/minisets/classlabel_mapping.pkl" , help='Path to the label mapping file. Leave empty for no mapping.')
     parser.add_argument('-prenorm_type', type=str, default=None, help='pre-normalisation type for input images, pick between minmax, window. To do no pre-normalisation, set to None.')
     parser.add_argument('-prenorm_window_min_percentile', type=int, default=1, help='min percentile for window normalization')
     parser.add_argument('-prenorm_window_max_percentile', type=int, default=99, help='max percentile for window normalization')
     parser.add_argument('-test_img_list', type=str,default='', help='the list of test images, to be used only by val_finetune_noprompt.py')
     parser.add_argument('-test_prefinetune', type=bool, default=False, help='whether to use pre-finetuning weights (i.e. sam_ckpt) for testing')
+    parser.add_argument('-test_tag', type=str, default='', help='tag to append to the test_results folder name')
     parser.add_argument('-seg_save_dir', type=str, default='', help='directory to save segmentation results')
 
     opt = parser.parse_args()

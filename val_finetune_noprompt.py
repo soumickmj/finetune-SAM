@@ -44,10 +44,12 @@ def main(args,test_image_list):
     
     if args.test_prefinetune:
         print('Testing pre-finetuned model..')
-        save_subfolder = 'test_results_prefinetune'
+        if args.test_tag:
+            args.test_tag = f'{args.test_tag}_prefinetune'
+        else:
+            args.test_tag = 'prefinetune'
         sam_fine_tune = sam_model_registry[args.arch](args,checkpoint=os.path.join(args.sam_ckpt),num_classes=args.num_cls)
     else:
-        save_subfolder = 'test_results'
         if args.finetune_type == 'adapter' or args.finetune_type == 'vanilla':
             sam_fine_tune = sam_model_registry[args.arch](args,checkpoint=os.path.join(args.dir_checkpoint,'checkpoint_best.pth'),num_classes=args.num_cls)
         elif args.finetune_type == 'lora':
@@ -115,6 +117,10 @@ def main(args,test_image_list):
     class_iou /=(i+1)
     cls_dsc /=(i+1)
 
+    save_subfolder = 'test_results'
+    if args.test_tag:
+        save_subfolder += f'_{args.test_tag}'
+
     save_folder = os.path.join(args.dir_checkpoint, save_subfolder)
     Path(save_folder).mkdir(parents=True,exist_ok = True)
     np.save(os.path.join(save_folder,'test_masks.npy'),np.concatenate(pred_msk,axis=0))
@@ -144,5 +150,6 @@ if __name__ == "__main__":
     args_orig.test_img_list = args.test_img_list
     args_orig.seg_save_dir = args.seg_save_dir
     args_orig.test_prefinetune = args.test_prefinetune
+    args_orig.test_tag = args.test_tag
 
     main(args_orig, args_orig.test_img_list)
