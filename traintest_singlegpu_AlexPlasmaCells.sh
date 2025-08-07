@@ -37,6 +37,11 @@ init_mode="${init_mode:-SAM}"
 peft_mode="${peft_mode:-adapter}"
 batch_size="${batch_size:-3}"
 num_workers="${num_workers:-3}"
+use_bbox_training="${use_bbox_training:-False}"
+do_instance_training="${do_instance_training:-False}"
+no_bbox_input="${no_bbox_input:-False}"
+prompt_region_type="${prompt_region_type:-}"
+prompt_dist_thre_ratio="${prompt_dist_thre_ratio:-0.1}"
 
 # new loss params
 loss_mode="${loss_mode:-0}" 
@@ -170,8 +175,34 @@ bool_to_arg() {
     fi
 }
 
+if [ "$use_bbox_training" == "True" ]; then
+    run_tag="${run_tag}_bbox_${prompt_region_type}"
+    if [ "$no_bbox_input" == "True" ]; then
+        run_tag="${run_tag}_nobboxinput"
+    fi
+    if [ "$prompt_dist_thre_ratio" != "0.0" ]; then
+        run_tag="${run_tag}_promptdistthre${prompt_dist_thre_ratio}"
+    else
+        run_tag="${run_tag}_perfectprompt"
+    fi
+    if [ "$do_instance_training" == "True" ]; then
+        script="SingleGPU_train_finetune_instance.py"
+        echo "Doing instance training with bounding boxes. Setting batch size to 1."
+        run_tag="${run_tag}_instance"
+        batch_size="1"
+    else
+        script="SingleGPU_train_finetune_box.py"
+        echo "Training with bounding boxes. Setting batch size to 1."
+        batch_size="1"
+    fi
+    script="SingleGPU_train_finetune_box.py"
+    batch_size="1"
+else
+    script="SingleGPU_train_finetune_noprompt.py"
+fi
+
 # Fine-tune the model
-srun poetry run python SingleGPU_train_finetune_noprompt.py \
+srun poetry run python $script \
     $(bool_to_arg "if_warmup" "True") \
     --label_mapping "" \
     --targets "" \
@@ -196,7 +227,10 @@ srun poetry run python SingleGPU_train_finetune_noprompt.py \
     --loss_mode "$loss_mode" \
     $(bool_to_arg "add_boundary_loss" "$add_boundary_loss") \
     $(bool_to_arg "include_background_loss" "$include_background_loss") \
-    $(bool_to_arg "val_dsc_monitor" "$val_dsc_monitor")
+    $(bool_to_arg "val_dsc_monitor" "$val_dsc_monitor") \
+    --prompt_region_type "$prompt_region_type" \
+    $(bool_to_arg "no_bbox_input" "$no_bbox_input") \
+    --prompt_dist_thre_ratio "$prompt_dist_thre_ratio" 
 
 # # Test before finetuning
 srun poetry run python val_finetune_noprompt.py \
@@ -213,10 +247,10 @@ srun poetry run python val_finetune_noprompt.py \
     --run_tag "$run_tag" \
     --dir_checkpoint "$dsRoot/checkpoints" 
 
-# Additional inference on unseen images
-srun poetry run python val_finetune_noprompt.py \
-    --test_tag "$test_tag" \
-    --dataset_name "$dataset_name" \
-    --test_img_list "$additional_infer_img_list" \
-    --run_tag "$run_tag" \
-    --dir_checkpoint "$dsRoot/checkpoints" \
+# # Additional inference on unseen images
+# srun poetry run python val_finetune_noprompt.py \
+#     --test_tag "$test_tag" \
+#     --dataset_name "$dataset_name" \
+#     --test_img_list "$additional_infer_img_list" \
+#     --run_tag "$run_tag" \
+#     --dir_checkpoint "$dsRoot/checkpoints" \

@@ -125,49 +125,73 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
     for epoch in pbar:
         sam.train()
         train_loss = 0
-        for i,data in enumerate(tqdm(trainloader)):
+        count = 0
+        for _,data in enumerate(tqdm(trainloader)):
             imgs = data['image'].cuda()
-            msks = torchvision.transforms.Resize((args.out_size,args.out_size),InterpolationMode.NEAREST)(data['mask'])
-            msks = msks.cuda()
+            msks = data['mask'].cuda()
+            if 'bbox_mode' in data and data['bbox_mode'][0] == 'supplied':
+                msks = torchvision.transforms.Resize((args.out_size,args.out_size),InterpolationMode.NEAREST)(msks)
             boxes = data['boxes'].cuda()
-            if args.if_update_encoder:
-                img_emb = sam.image_encoder(imgs)
-            else:
-                with torch.no_grad():
-                    img_emb = sam.image_encoder(imgs)
-            
-            # get default embeddings
-            sparse_emb, dense_emb = sam.prompt_encoder(
-                points=None,
-                boxes=boxes,
-                masks=None,
-            )
-            pred, _ = sam.mask_decoder(
-                            image_embeddings=img_emb,
-                            image_pe=sam.prompt_encoder.get_dense_pe(), 
-                            sparse_prompt_embeddings=sparse_emb,
-                            dense_prompt_embeddings=dense_emb, 
-                            multimask_output=True,
-                          )
-            if pred.shape[-2:] != msks.shape[-2:]: #SAM's output is always 256x256, resize it to the original size
-                pred = F.interpolate(pred, size=msks.shape[-2:], mode='bilinear')
-            
-            if args.loss_mode in [-1, 0]:
-                loss_dice = criterion1(pred, msks) 
-                loss_ce = criterion2(pred, torch.squeeze(msks, 1))
-                loss =  loss_dice + loss_ce
-            elif args.loss_mode == 1:
-                loss = criterion(pred, msks)
-                loss_dice = loss_ce = loss
-            elif args.loss_mode == 2:
-                loss_dice = criterion1(pred, msks)
-                loss_ce = criterion2(pred, msks)
-                loss = loss_dice + loss_ce
 
-            if args.add_boundary_loss:
-                loss_boundary = criterion_boundary(pred, msks)
-                loss += loss_boundary
-            
+            loss = 0
+            loss_dice = 0
+            loss_ce = 0
+            loss_boundary = 0
+            for i in range(boxes.shape[1]):
+                count += 1
+                box_i = boxes[0, i, :].unsqueeze(0).unsqueeze(1)
+                x_min, y_min, x_max, y_max = box_i[0, 0, :].cpu().long().tolist()
+                binary_mask = torch.zeros_like(msks, dtype=torch.bool, device=msks.device)
+                binary_mask[0, 0, int(y_min):int(y_max), int(x_min):int(x_max)] = True
+                filtered_mask = msks * binary_mask
+                if 'bbox_mode' in data and data['bbox_mode'][0] == 'computed':
+                    filtered_mask = torchvision.transforms.Resize((args.out_size,args.out_size),InterpolationMode.NEAREST)(filtered_mask)
+
+                if args.no_bbox_input:
+                    box_i = None
+                                                   
+                if args.if_update_encoder:
+                    img_emb = sam.image_encoder(imgs)
+                else:
+                    with torch.no_grad():
+                        img_emb = sam.image_encoder(imgs)
+                
+                # get default embeddings
+                sparse_emb, dense_emb = sam.prompt_encoder(
+                    points=None,
+                    boxes=box_i,
+                    masks=None,
+                )
+                pred, _ = sam.mask_decoder(
+                                image_embeddings=img_emb,
+                                image_pe=sam.prompt_encoder.get_dense_pe(), 
+                                sparse_prompt_embeddings=sparse_emb,
+                                dense_prompt_embeddings=dense_emb, 
+                                multimask_output=True,
+                            )
+                if pred.shape[-2:] != filtered_mask.shape[-2:]: #SAM's output is always 256x256, resize it to the original size
+                    pred = F.interpolate(pred, size=filtered_mask.shape[-2:], mode='bilinear')
+                
+                if args.loss_mode in [-1, 0]:
+                    loss_dice_instance = criterion1(pred, filtered_mask) 
+                    loss_ce_instance = criterion2(pred, torch.squeeze(filtered_mask, 1))
+                    loss_instance =  loss_dice_instance + loss_ce_instance
+                elif args.loss_mode == 1:
+                    loss_instance = criterion(pred, filtered_mask)
+                    loss_dice_instance = loss_ce_instance = loss_instance
+                elif args.loss_mode == 2:
+                    loss_dice_instance = criterion1(pred, filtered_mask)
+                    loss_ce_instance = criterion2(pred, filtered_mask)
+                    loss_instance = loss_dice_instance + loss_ce_instance
+
+                if args.add_boundary_loss:
+                    loss_boundary_instance = criterion_boundary(pred, filtered_mask)
+                    loss_instance += loss_boundary_instance
+
+                loss += loss_instance 
+                loss_dice += loss_dice_instance
+                loss_ce += loss_ce_instance
+
             loss.backward()
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
@@ -196,52 +220,80 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
             if args.add_boundary_loss:
                 writer.add_scalar('info/loss_boundary', loss_boundary, iter_num)
 
-        train_loss /= (i+1)
+        train_loss /= count
         pbar.set_description('Epoch num {}| train loss {} \n'.format(epoch,train_loss))
 
         if epoch%2==0:
             eval_loss=0
             dsc = 0
+            count = 0
             sam.eval()
             with torch.no_grad():
-                for i,data in enumerate(tqdm(valloader)):
+                for _,data in enumerate(tqdm(valloader)):
                     imgs = data['image'].cuda()
-                    msks = torchvision.transforms.Resize((args.out_size,args.out_size),InterpolationMode.NEAREST)(data['mask'])
-                    msks = msks.cuda()
+                    msks = data['mask'].cuda()
                     boxes = data['boxes'].cuda()
-                    img_emb= sam.image_encoder(imgs)
-                    sparse_emb, dense_emb = sam.prompt_encoder(
-                        points=None,
-                        boxes=boxes,
-                        masks=None,
-                    )
-                    pred, _ = sam.mask_decoder(
-                                    image_embeddings=img_emb,
-                                    image_pe=sam.prompt_encoder.get_dense_pe(), 
-                                    sparse_prompt_embeddings=sparse_emb,
-                                    dense_prompt_embeddings=dense_emb, 
-                                    multimask_output=True,
-                                  )
-                    if pred.shape[-2:] != msks.shape[-2:]: #SAM's output is always 256x256, resize it to the original size
-                        pred = F.interpolate(pred, size=msks.shape[-2:], mode='bilinear')
+                    
+                    loss = 0
+                    loss_dice = 0
+                    loss_ce = 0
+                    loss_boundary = 0
+                    dsc_instance = 0
+                    for i in range(boxes.shape[1]):
+                        box_i = boxes[0, i, :].unsqueeze(0).unsqueeze(1)
+                        x_min, y_min, x_max, y_max = box_i[0, 0, :].cpu().long().tolist()
+                        binary_mask = torch.zeros_like(msks, dtype=torch.bool, device=msks.device)
+                        binary_mask[0, 0, y_min:y_max, x_min:x_max] = True
+                        filtered_mask = msks * binary_mask
+                        filtered_mask = torchvision.transforms.Resize((args.out_size,args.out_size),InterpolationMode.NEAREST)(filtered_mask)
 
-                    if args.loss_mode in [-1, 0]:
-                        loss = criterion1(pred, msks.float()) + criterion2(pred, torch.squeeze(msks, 1))
-                    elif args.loss_mode == 1:
-                        loss = criterion(pred, msks)
-                    elif args.loss_mode == 2:
-                        loss = criterion1(pred, msks) + criterion2(pred, msks)
+                        if args.no_bbox_input:
+                            box_i = None
+                                                        
+                        img_emb = sam.image_encoder(imgs)
+                        sparse_emb, dense_emb = sam.prompt_encoder(
+                            points=None,
+                            boxes=box_i,
+                            masks=None,
+                        )
+                        pred, _ = sam.mask_decoder(
+                                        image_embeddings=img_emb,
+                                        image_pe=sam.prompt_encoder.get_dense_pe(), 
+                                        sparse_prompt_embeddings=sparse_emb,
+                                        dense_prompt_embeddings=dense_emb, 
+                                        multimask_output=True,
+                                    )
+                        if pred.shape[-2:] != filtered_mask.shape[-2:]: #SAM's output is always 256x256, resize it to the original size
+                            pred = F.interpolate(pred, size=filtered_mask.shape[-2:], mode='bilinear')
+                        
+                        if args.loss_mode in [-1, 0]:
+                            loss_dice_instance = criterion1(pred, filtered_mask) 
+                            loss_ce_instance = criterion2(pred, torch.squeeze(filtered_mask, 1))
+                            loss_instance =  loss_dice_instance + loss_ce_instance
+                        elif args.loss_mode == 1:
+                            loss_instance = criterion(pred, filtered_mask)
+                            loss_dice_instance = loss_ce_instance = loss_instance
+                        elif args.loss_mode == 2:
+                            loss_dice_instance = criterion1(pred, filtered_mask)
+                            loss_ce_instance = criterion2(pred, filtered_mask)
+                            loss_instance = loss_dice_instance + loss_ce_instance
 
-                    if args.add_boundary_loss:
-                        loss += criterion_boundary(pred, msks)
+                        if args.add_boundary_loss:
+                            loss_boundary_instance = criterion_boundary(pred, filtered_mask)
+                            loss_instance += loss_boundary_instance
 
-                    eval_loss +=loss.item()
-                    dsc_batch = dice_coeff_multi_class(pred.argmax(dim=1).cpu(), torch.squeeze(msks,1).cpu(),args.num_cls)
-                    dsc+=dsc_batch
+                        loss += loss_instance 
+                        loss_dice += loss_dice_instance
+                        loss_ce += loss_ce_instance
 
-                eval_loss /= (i+1)
-                dsc /= (i+1)
-                
+                        dsc_instance += dice_coeff_multi_class(pred.argmax(dim=1).cpu(), torch.squeeze(filtered_mask,1).cpu(),args.num_cls)
+
+                    eval_loss += loss.item()
+                    dsc+=dsc_instance 
+
+                eval_loss /= count
+                dsc /= count
+
                 writer.add_scalar('eval/loss', eval_loss, epoch)
                 writer.add_scalar('eval/dice', dsc, epoch)
                 
@@ -278,6 +330,7 @@ if __name__ == "__main__":
     val_img_list = args.val_img_list
     
     assert bool(args.prompt_region_type), "Please specify a valid prompt region type (e.g., 'random', 'all', 'largest_k')."
+    assert args.b == 1, "Batch size must be set to 1 when using instance-wise bounding box prompts."
 
     num_workers = args.w
     if_vis = True

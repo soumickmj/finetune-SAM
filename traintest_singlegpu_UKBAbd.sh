@@ -32,9 +32,9 @@ done
 #set the default values for the commandline arguments
 expID="${expID:-init}"
 dsID="${dsID:-254}"
-dsTag="${dsTag:-EmmaAlexProcessedV0}"
+dsTag="${dsTag:-EmmaAlexFinalV0}"
 dsRoot="${dsRoot:-/group/glastonbury/soumick/dataset/ukbbnii/minisets}"
-splitTag="${splitTag:-Alex_processed_Emma_Cris_processed_trainN10_rs1701}"
+splitTag="${splitTag:-Alex_final_Emma_final_trainN10_rs1701}"
 targets="${targets:-liver}"
 init_mode="${init_mode:-SAM}"
 peft_mode="${peft_mode:-adapter}"

@@ -106,13 +106,24 @@ class Public_dataset(Dataset):
             if self.args.load_all or line.endswith('.nii.gz'): #for nifti files, let's assume we will keep all the masks
                 self.data_list.append(line)
             else:
-                img_path, mask_path = line.split(',')
-                mask_path = mask_path.strip()
-                if mask_path.startswith('/'):
-                    mask_path = mask_path[1:]
-                msk = Image.open(os.path.join(self.mask_folder, mask_path)).convert('L')
-                if self.should_keep(msk, mask_path):
+                datum = line.split(',')
+                if len(datum) == 1:
                     self.data_list.append(line)
+                else:
+                    mask_path = datum[1].strip()
+                    if bool(mask_path):
+                        if bool(self.mask_folder):
+                            if mask_path.startswith('/'):
+                                mask_path = mask_path[1:]
+                        msk = Image.open(os.path.join(self.mask_folder, mask_path)).convert('L')
+                        if self.should_keep(msk, mask_path):
+                            self.data_list.append(line)
+                    else:
+                        self.data_list.append(line)
+
+        if len(self.data_list[-1].split(",")) == 3:
+            print(f'Loaded {len(self.data_list)} entries with coordinates.')
+            assert self.if_prompt and self.prompt_type == 'box', "Coordinates are only supported for box prompts."
 
         print(f'Filtered data list to {len(self.data_list)} entries.')
 
@@ -165,7 +176,7 @@ class Public_dataset(Dataset):
             img_path = data[0]
             mask_path = ''
         else:
-            img_path, mask_path = data
+            img_path, mask_path = data[0], data[1]
 
         if img_path.endswith('.nii.gz'): #we have nifti files
             img_path = img_path.strip()
@@ -202,7 +213,11 @@ class Public_dataset(Dataset):
             msk = np.array(msk,dtype=int)
         elif self.cls>0:
             msk = np.array(msk==self.cls,dtype=int)
-        return self.prepare_output(img, msk, img_path, mask_path)
+
+        if len(data) == 3:
+            return self.prepare_output(img, msk, img_path, coords=data[2])
+        else:
+            return self.prepare_output(img, msk, img_path)
 
     def apply_transformations(self, img, msk):
         if self.crop:
@@ -226,7 +241,7 @@ class Public_dataset(Dataset):
         msk = transforms.functional.crop(msk, t, l, h, w)
         return img, msk
 
-    def prepare_output(self, img, msk, img_path, mask_path):
+    def prepare_output(self, img, msk, img_path, coords=None):
         if len(msk.shape)==2:
             # msk = torch.unsqueeze(torch.tensor(msk,dtype=torch.long),0)
             msk = torch.unsqueeze(msk.clone(), 0).long() #due to UserWarning
@@ -234,21 +249,24 @@ class Public_dataset(Dataset):
         if self.if_prompt:
             # Assuming get_first_prompt and get_top_boxes functions are defined and handle prompt creation
             if self.prompt_type == 'point':
-                prompt, mask_now = get_first_prompt(msk.numpy()[0], region_type=self.region_type)
+                prompt, mask_now = get_first_prompt(msk.numpy()[0], dist_thre_ratio=self.args.prompt_dist_thre_ratio, region_type=self.region_type)
                 pc = torch.tensor(prompt[:, :2], dtype=torch.float)
                 pl = torch.tensor(prompt[:, -1], dtype=torch.float)
                 msk = torch.unsqueeze(torch.tensor(mask_now,dtype=torch.long),0)
                 output.update({'point_coords': pc, 'point_labels': pl,'mask':msk})
             elif self.prompt_type == 'box':
-                print(msk.shape,msk.numpy()[0].shape)
-                prompt, mask_now = get_top_boxes(msk.numpy()[0], region_type=self.region_type)
+                if coords is not None:
+                    prompt = np.array([[int(x) for x in group.split('-')] for group in coords.split(';')])
+                    bbox_mode = "supplied"
+                else:
+                    prompt, mask_now = get_top_boxes(msk.numpy()[0], dist_thre_ratio=self.args.prompt_dist_thre_ratio, region_type=self.region_type)
+                    msk = torch.unsqueeze(torch.tensor(mask_now,dtype=torch.long),0)
+                    bbox_mode = "computed"
                 box = torch.tensor(prompt, dtype=torch.float)
-                # the ground truth are only the selected masks
-                msk = torch.unsqueeze(torch.tensor(mask_now,dtype=torch.long),0)
-                output.update({'boxes': box,'mask':msk})
+                output.update({'boxes': box,'mask':msk, 'bbox_mode': bbox_mode})
             elif self.prompt_type == 'hybrid':
-                point_prompt, _ = get_first_prompt(msk[0].numpy(), self.region_type)
-                box_prompt, _ = get_top_boxes(msk.numpy(), this.region_type)
+                point_prompt, _ = get_first_prompt(msk[0].numpy(), dist_thre_ratio=self.args.prompt_dist_thre_ratio, region_type=self.region_type)
+                box_prompt, _ = get_top_boxes(msk.numpy(), dist_thre_ratio=self.args.prompt_dist_thre_ratio, region_type=self.region_type)
                 pc = torch.tensor(point_prompt[:, :2], dtype=torch.float)
                 pl = torch.tensor(point_prompt[:, -1], dtype=torch.float)
                 box = torch.tensor(box_prompt, dtype=torch.float)
