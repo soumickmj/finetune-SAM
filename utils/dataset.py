@@ -15,6 +15,7 @@ from scipy.ndimage import zoom
 import einops
 from utils.funcs import *
 from torchvision.transforms import InterpolationMode
+import SimpleITK as sitk
 #from .utils.transforms import ResizeLongestSide
 from utils.process_img import get_images
 
@@ -106,23 +107,29 @@ class Public_dataset(Dataset):
             #check if the line is header or empty
             if line in ["image_file,mask_file,coords", "image_file,mask_file", "image,mask,coords", "image,mask"] or not line.strip():
                 continue
-            if self.args.load_all or line.endswith('.nii.gz'): #for nifti files, let's assume we will keep all the masks
-                self.data_list.append(line)
+            if self.args.load_all or not self.delete_empty_masks:
+                self.data_list.append(line.strip())
             else:
-                datum = line.split(',')
+                datum = line.strip().split(',')
                 if len(datum) == 1:
-                    self.data_list.append(line)
+                    self.data_list.append(line.strip())
                 else:
                     mask_path = datum[1].strip()
                     if bool(mask_path):
                         if bool(self.mask_folder):
                             if mask_path.startswith('/'):
                                 mask_path = mask_path[1:]
-                        msk = Image.open(os.path.join(self.mask_folder, mask_path)).convert('L')
+                        if mask_path.endswith('.nii.gz'): 
+                            file_sitk_lbl = sitk.ReadImage(os.path.join(self.mask_folder, mask_path))
+                            msk = np.uint8(sitk.GetArrayFromImage(file_sitk_lbl))
+                            msk = Image.fromarray(msk[..., self.args.slice_index, :, :].squeeze())
+                        else:
+                            msk = Image.open(os.path.join(self.mask_folder, mask_path))
+                        msk = msk.convert('L')
                         if self.should_keep(msk, mask_path):
-                            self.data_list.append(line)
+                            self.data_list.append(line.strip())
                     else:
-                        self.data_list.append(line)
+                        self.data_list.append(line.strip())
 
         if len(self.data_list[-1].split(",")) == 3:
             print(f'Loaded {len(self.data_list)} entries with coordinates.')
@@ -130,29 +137,25 @@ class Public_dataset(Dataset):
 
         print(f'Filtered data list to {len(self.data_list)} entries.')
 
-    def read_cosa():
-
     def should_keep(self, msk, mask_path):
         """
         Determine whether to keep an image based on the mask and part list conditions.
         """
-        if self.delete_empty_masks:
-            mask_array = np.array(msk, dtype=int)
-            #print(np.unique(mask_array))
-            if 'combine_all' in self.targets:
-                return np.any(mask_array > 0)
-            elif 'multi_all' in self.targets:
-                return np.any(mask_array > 0)
-            elif any(target in self.targets for target in self.segment_names_to_labels):
-                target_classes = [self.segment_names_to_labels[target][1] for target in self.targets if target in self.segment_names_to_labels]
-                return any(mask_array == cls for cls in target_classes)
-            elif self.cls>0:
-                return np.any(mask_array == self.cls)
-            if self.part_list[0] != 'all':
-                return any(part in mask_path for part in self.part_list)
-            return False
-        else:
-            return True
+        mask_array = np.array(msk, dtype=int)
+        #print(np.unique(mask_array))
+        if 'combine_all' in self.targets:
+            return np.any(mask_array > 0)
+        elif 'multi_all' in self.targets:
+            return np.any(mask_array > 0)
+        elif any(target in self.targets for target in self.segment_names_to_labels):
+            # target_classes = [self.segment_names_to_labels[target][1] for target in self.targets if target in self.segment_names_to_labels] #Original line: Not sure why they extracted the 2nd element from the mapping, because they anyway mention the format as {'label_name1':cls_idx1, 'label_name2':,cls_idx2} and we need the cls_idxX
+            target_classes = [self.segment_names_to_labels[target] for target in self.targets if target in self.segment_names_to_labels]
+            return any(np.any(mask_array == cls) for cls in target_classes)
+        elif self.cls>0:
+            return np.any(mask_array == self.cls)
+        if self.part_list[0] != 'all':
+            return any(part in mask_path for part in self.part_list)
+        return False
 
     def setup_transformations(self):
         if self.phase =='train':

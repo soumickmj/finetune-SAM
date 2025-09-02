@@ -41,7 +41,7 @@ cfg.set_seed(1701)  # Set a fixed seed for reproducibility
 
 def main(args,test_image_list):
     # change to 'combine_all' if you want to combine all targets into 1 cls
-    test_dataset = Public_dataset(args,args.img_folder, args.mask_folder, test_image_list,phase='test',targets=args.targets,if_prompt=False)
+    test_dataset = Public_dataset(args,args.img_folder, args.mask_folder, test_image_list,phase='test',targets=args.targets,if_prompt=False,delete_empty_masks=False) #for testing, we will consider all the samples (including empty masks)
     testloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1)
     
     if args.test_prefinetune:
