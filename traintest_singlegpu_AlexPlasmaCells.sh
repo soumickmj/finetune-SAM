@@ -201,7 +201,7 @@ else
     script="SingleGPU_train_finetune_noprompt.py"
 fi
 
-# Fine-tune the model
+Fine-tune the model
 srun poetry run python $script \
     $(bool_to_arg "if_warmup" "True") \
     --label_mapping "" \

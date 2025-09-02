@@ -8,7 +8,7 @@
 #SBATCH --gres=gpu:1          # number of GPUs (max=4)
 #SBATCH --chdir=/group/glastonbury/alex/yolov8_workspace/SAM_FT/SLURM
 #SBATCH --output=ftSAM_%x_%j.log
-#SBATCH --mem-per-cpu=4000Mb # RAM per CPU
+#SBATCH --mem-per-cpu=30G # RAM per CPU
 
 cd $SLURM_SUBMIT_DIR
 
@@ -144,4 +144,4 @@ srun poetry run python val_finetune_noprompt.py \
     --dataset_name "$dataset_name" \
     --test_img_list "$additional_infer_img_list" \
     --run_tag "$run_tag" \
-    --dir_checkpoint "$dsRoot/checkpoints" \
+    --dir_checkpoint "$dir_checkpoint"

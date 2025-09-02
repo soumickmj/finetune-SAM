@@ -5,21 +5,22 @@
 dsID_list=("Tiles")
 
 # splitTag_list=("Big" "Small")
-splitTag_list=("Biggest")
+# splitTag_list=("Biggest")
+splitTag_list=("Biggest_with_coords")
 
 # init_mode_list=("SAM" "MedSAM" "PathoSAM")
-init_mode_list=("SAM") #"PathoSAM")
+init_mode_list=("SAM" "PathoSAM")
 # init_mode_list=("PathoSAM")
 
-# peft_mode_list=("adapter" "lora")
-peft_mode_list=("adapter")
+peft_mode_list=("adapter" "lora")
+# peft_mode_list=("adapter")
 
 # new loss params
 # loss_mode_list=(-1 0 1 2) 
-loss_mode_list=(0 2) 
+loss_mode_list=(0 1 2) 
 add_boundary_loss_list=("True" "False") 
 include_background_loss_list=("True" "False") 
-val_dsc_monitor_list=("True" "False") 
+val_dsc_monitor_list=("False") 
 
 # prompt_region_type_list=("random" "all")
 prompt_region_type_list=("all")
@@ -30,7 +31,7 @@ prompt_region_type_list=("all")
 # prompt_dist_thre_ratio_list=("0.0" "0.1")
 
 do_instance_training_list=("True")
-no_bbox_input_list=("True")
+no_bbox_input_list=("True" "False")
 prompt_dist_thre_ratio_list=("0.0")
 
 echo "Starting job submission script..."
@@ -71,7 +72,7 @@ for dsID in "${dsID_list[@]}"; do
                         # 1. Build the command in an array for safe execution
                         cmd=(
                             sbatch 
-                            -J "instBBox_${job_name}" 
+                            -J "instRealBBox_${job_name}" 
                             traintest_singlegpu_AlexPlasmaCells.sh 
                             --expID "${expID}"
                             --dsID "${dsID}" 

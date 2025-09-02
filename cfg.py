@@ -94,7 +94,7 @@ def parse_args():
     parser.add_argument('--evl_chunk', type=int, default=None , help='evaluation chunk')
     
     #added by Soumick
-    parser.add_argument('--run_tag', type=str, default="" , help='tag to append to the run name')
+    parser.add_argument('--run_tag', type=str, default="prova" , help='tag to append to the run name')
     parser.add_argument('--load_all', action=argparse.BooleanOptionalAction, default=True, help='No prechecks of the masks will be performed, all masks will be loaded')
     parser.add_argument('--slice_index', type=int, default=-1, help='slice/channel (last dim) index for 3D images')
     parser.add_argument('--label_mapping', default="/group/glastonbury/soumick/dataset/ukbbnii/minisets/classlabel_mapping.pkl" , help='Path to the label mapping file. Leave empty for no mapping.')

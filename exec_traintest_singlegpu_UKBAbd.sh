@@ -1,15 +1,15 @@
 #!/bin/bash
 
 # Define the parameter values in arrays
-# dsID_list=("254" "204" "259" "260")
-dsID_list=("204" "259" "260")
+dsID_list=("254" "204" "259" "260")
+# dsID_list=("204" "259" "260")
 # dsID_list=("259")
 
 splitTag_list=("Alex_final_Emma_final_trainN10_rs1701" "Alex_final_Emma_final_trainN20_rs1701")
 # splitTag_list=("Alex_final_Emma_final_trainN10_rs1701")
 
-# init_mode_list=("SAM" "MedSAM" "SSLSAM" "MedicoSAM" "MRIFoundation")
-init_mode_list=("MRIFoundation")
+init_mode_list=("SAM" "MedSAM" "SSLSAM" "MedicoSAM" "MRIFoundation")
+# init_mode_list=("MRIFoundation")
 # init_mode_list=("SSLSAM")
 
 peft_mode_list=("adapter" "lora")

@@ -103,6 +103,9 @@ class Public_dataset(Dataset):
         with open(img_list, 'r') as file:
             lines = file.read().strip().split('\n')
         for line in lines:
+            #check if the line is header or empty
+            if line in ["image_file,mask_file,coords", "image_file,mask_file", "image,mask,coords", "image,mask"] or not line.strip():
+                continue
             if self.args.load_all or line.endswith('.nii.gz'): #for nifti files, let's assume we will keep all the masks
                 self.data_list.append(line)
             else:
@@ -123,9 +126,11 @@ class Public_dataset(Dataset):
 
         if len(self.data_list[-1].split(",")) == 3:
             print(f'Loaded {len(self.data_list)} entries with coordinates.')
-            assert self.if_prompt and self.prompt_type == 'box', "Coordinates are only supported for box prompts."
+            assert (self.phase == "test") or (self.if_prompt and self.prompt_type == 'box'), "Coordinates are only supported for box prompts."
 
         print(f'Filtered data list to {len(self.data_list)} entries.')
+
+    def read_cosa():
 
     def should_keep(self, msk, mask_path):
         """

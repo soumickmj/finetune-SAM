@@ -168,3 +168,6 @@ wandb/*
 *.pt*
 checkpoints/*
 *.pyc
+job_config_*.txt
+*prova*
+datasets/*
