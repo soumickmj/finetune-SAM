@@ -37,7 +37,7 @@ from utils.utils import vis_image
 import cfg
 from argparse import Namespace
 import json
-from utils.process_img import unpad_arr, save_image, create_overlay
+from utils.process_img import unpad_arr, save_image, post_process_mask, create_overlay
 
 cfg.set_seed(1701)  # Set a fixed seed for reproducibility
 
@@ -118,6 +118,10 @@ def main(args,test_image_list):
             pred_mask = np.squeeze(pred_fine.cpu().numpy())
             pred_mask = test_dataset.mask_unremapper(pred_mask) #if we have re-mapped the IDs inside the dataset, we need to invert the operation now
             save_image(pred_mask, os.path.join(args.seg_save_dir, data['img_name'][0]), is_RGB=False)
+            if args.post_process_mask:
+                proc_mask = post_process_mask(pred_mask, fill_holes=args.post_process_fillholes, keep_largest_component=args.post_process_largestsegment)
+                save_image(proc_mask, os.path.join(args.seg_save_dir, args.proc_tag, data['img_name'][0]), is_RGB=False)
+
 
         pred_msk.append(pred_fine.cpu().numpy())
         yhat = (pred_fine).cpu().long().flatten()
@@ -192,6 +196,18 @@ if __name__ == "__main__":
     args_orig.test_prefinetune = args.test_prefinetune
     args_orig.test_tag = args.test_tag
     args_orig.store_emb = args.store_emb
+    args_orig.post_process_mask = args.post_process_mask
+    args_orig.post_process_fillholes = args.post_process_fillholes
+    args_orig.post_process_largestsegment = args.post_process_largestsegment
+
+
+    if args.post_process_mask:
+        args_orig.proc_tag = 'proc'
+        if args.post_process_fillholes:
+            args_orig.proc_tag += '_fillholes'
+        if args.post_process_largestsegment:
+            args_orig.proc_tag += '_largestseg'
+        os.makedirs(os.path.join(args_orig.seg_save_dir, args_orig.proc_tag), exist_ok=True)
     
     if args_orig.seed != args.seed:
         print(f"Warning: The seed in the config file ({args_orig.seed}) does not match the one provided ({args.seed}). Using the provided seed.")

@@ -1,9 +1,9 @@
 import SimpleITK as sitk
 import numpy as np
 from skimage.filters import threshold_otsu
-from skimage.measure import label
+from skimage.measure import label as skLabel
 from skimage.morphology import remove_small_objects, binary_closing, disk
-from scipy.ndimage import binary_fill_holes
+from scipy.ndimage import label, binary_fill_holes
 import matplotlib
 
 def get_images(pth_img, pth_lbl='', slice_index=None, norm_type=None, window_min_percentile=1, window_max_percentile=99):
@@ -17,7 +17,7 @@ def get_images(pth_img, pth_lbl='', slice_index=None, norm_type=None, window_min
 
     assert len(image_data.shape) in [2, 3], "Image data must be 2D or 3D, as the function get_image isn't implemented for more. Current shape: {}".format(image_data.shape)
     
-    if bool(slice_index) and slice_index != -1:
+    if slice_index not in [None, -1]:
         image_data = image_data[..., slice_index, :, :].squeeze()
         if bool(pth_lbl):
             label_data = label_data[..., slice_index, :, :].squeeze()
@@ -114,7 +114,7 @@ def segment_image(image_data, model_demo, prompt, use_otsu=False, keep_largest_o
             
             # Keep only the largest connected component if requested
             if keep_largest_only and np.any(seg_bool):
-                labelled = label(seg_bool)
+                labelled = skLabel(seg_bool)
                 if labelled.max() > 0:
                     # Find the largest connected component
                     component_sizes = np.bincount(labelled.ravel())
@@ -130,6 +130,80 @@ def segment_image(image_data, model_demo, prompt, use_otsu=False, keep_largest_o
 
         segs.append(seg)
     return np.array(segs)
+
+def post_process_mask(pred_mask, fill_holes=False, keep_largest_component=False):
+    """
+    Performs post-processing on a multi-class prediction mask.
+
+    This function processes each class (non-zero values) in the input mask
+    independently. It can fill holes within each segment and/or keep only the
+    largest connected component for each class.
+
+    Args:
+        pred_mask (np.ndarray): The input integer mask with unique values for
+                                each class (e.g., 0 for background, 1 for
+                                class 1, 2 for class 2).
+        fill_holes (bool): If True, fills holes within each connected
+                           component of each class.
+        keep_largest_component (bool): If True, discards all but the largest
+                                       connected component for each class.
+
+    Returns:
+        np.ndarray: The post-processed mask with the same shape and dtype as
+                    the input.
+    """
+    # Create an empty array to store the final processed mask.
+    final_mask = np.zeros_like(pred_mask)
+
+    # Get the unique class IDs, excluding the background (0).
+    class_ids = np.unique(pred_mask)
+    class_ids = class_ids[class_ids != 0]
+
+    # Process each class ID separately.
+    for class_id in class_ids:
+        # Create a binary mask for the current class.
+        class_mask = (pred_mask == class_id)
+        
+        # This will hold the processed version of the current class mask.
+        processed_class_mask = class_mask.copy()
+
+        # STEP 1: Fill holes for each individual segment.
+        if fill_holes:
+            # Find all disconnected components for the current class.
+            labelled_components, num_components = label(processed_class_mask)
+            
+            # Create an empty mask to rebuild the hole-filled class mask.
+            temp_mask = np.zeros_like(processed_class_mask)
+            
+            # Iterate through each found component (label 1, 2, ...).
+            for i in range(1, num_components + 1):
+                component = (labelled_components == i)
+                filled_component = binary_fill_holes(component)
+                # Add the filled component to our temporary mask.
+                temp_mask |= filled_component
+            
+            processed_class_mask = temp_mask
+
+        # STEP 2: Select the biggest individual segment.
+        if keep_largest_component:
+            # Label the components of the (potentially hole-filled) mask.
+            labelled_components, num_components = label(processed_class_mask)
+            
+            # Proceed only if there are any components to analyse.
+            if num_components > 0:
+                component_sizes = np.bincount(labelled_components.ravel())
+                
+                if len(component_sizes) > 1:
+                    largest_component_label = np.argmax(component_sizes[1:]) + 1
+                    # Keep only the pixels belonging to the largest component.
+                    processed_class_mask = (labelled_components == largest_component_label)
+                else:
+                    # If no components are found after processing, result in an empty mask.
+                    processed_class_mask = np.zeros_like(processed_class_mask)
+
+        final_mask[processed_class_mask] = class_id
+        
+    return final_mask
 
 def _pepare_prompt_from_text_seg(text_model_demo, text_prompt, text_model_slice, use_otsu_text=False, second_model_mode=None):
     text_seg, seg_raw = text_model_demo.infer(text_prompt, slice_idx=text_model_slice, return_raw=True)
