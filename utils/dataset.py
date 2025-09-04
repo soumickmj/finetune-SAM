@@ -96,7 +96,8 @@ class Public_dataset(Dataset):
             self.label_dic = {}
         
         self.mask_remapper = np.vectorize(lambda x: self.remapping_dict.get(x, 0), otypes=[np.uint8])
-    
+        self.mask_unremapper = np.vectorize(lambda x: {v: k for k, v in self.remapping_dict.items()}.get(x, 0), otypes=[np.uint8])
+
     def load_data_list(self, img_list):
         """
         Load and filter the data list based on the existence of the mask and its relevance to the specified parts and targets.
@@ -191,11 +192,11 @@ class Public_dataset(Dataset):
             mask_path = mask_path.strip()
             img_msk = get_images(pth_img=img_path, pth_lbl=mask_path, slice_index=self.args.slice_index, norm_type=self.args.prenorm_type, window_min_percentile=self.args.prenorm_window_min_percentile, window_max_percentile=self.args.prenorm_window_max_percentile)
             if isinstance(img_msk, tuple):
-                img, msk = img_msk
+                img, msk, prepad_shape = img_msk
             else:
-                img = img_msk
+                img, prepad_shape = img_msk
                 msk = np.zeros_like(img, dtype=np.uint8) #no mask provided, create a dummy/placeholder mask
-            img = Image.fromarray(img).convert('RGB')            
+            img = Image.fromarray(img).convert('RGB')
         else:
             if bool(self.mask_folder):
                 if mask_path.startswith('/'):
@@ -205,6 +206,7 @@ class Public_dataset(Dataset):
                 msk = np.asarray(Image.open(os.path.join(self.mask_folder, mask_path.strip())).convert('L'))
             else:
                 msk = np.zeros_like(img, dtype=np.uint8) #no mask provided, create a dummy/placeholder mask
+            prepad_shape = img.size
 
         if  np.any(msk) and (not ('combine_all' in self.targets or 'multi_all' in self.targets)):
             msk = self.mask_remapper(msk)
@@ -223,10 +225,9 @@ class Public_dataset(Dataset):
             msk = np.array(msk==self.cls,dtype=int)
 
         if len(data) == 3:
-            return self.prepare_output(img, msk, img_path, coords=data[2])
+            return self.prepare_output(img, msk, img_path, coords=data[2], prepad_shape=prepad_shape)
         else:
-            return self.prepare_output(img, msk, img_path)
-
+            return self.prepare_output(img, msk, img_path, prepad_shape=prepad_shape)
     def apply_transformations(self, img, msk):
         if self.crop:
             img, msk = self.apply_crop(img, msk)
@@ -249,11 +250,11 @@ class Public_dataset(Dataset):
         msk = transforms.functional.crop(msk, t, l, h, w)
         return img, msk
 
-    def prepare_output(self, img, msk, img_path, coords=None):
+    def prepare_output(self, img, msk, img_path, coords=None, prepad_shape=None):
         if len(msk.shape)==2:
             # msk = torch.unsqueeze(torch.tensor(msk,dtype=torch.long),0)
             msk = torch.unsqueeze(msk.clone(), 0).long() #due to UserWarning
-        output = {'image': img, 'mask': msk, 'img_name': os.path.basename(img_path)}
+        output = {'image': img, 'mask': msk, 'img_name': os.path.basename(img_path), 'prepad_shape': prepad_shape}
         if self.if_prompt:
             # Assuming get_first_prompt and get_top_boxes functions are defined and handle prompt creation
             if self.prompt_type == 'point':

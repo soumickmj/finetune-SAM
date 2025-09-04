@@ -13,11 +13,11 @@
             "envFile": "/home/soumick.chatterjee/slurm_debugjob_env.sh",
             "args": [
                 "--dataset_name", "prova_UKBF20254_EmmaAlexProcessedV0",
-                "--train_img_list", "/group/glastonbury/soumick/dataset/ukbbnii/minisets/F20204_Liver_Imaging_T1_ShMoLLI_DICOM/manual_annotation/train_Alex_final_Emma_final_trainN10_rs1701.csv",
-                "--val_img_list", "/group/glastonbury/soumick/dataset/ukbbnii/minisets/F20204_Liver_Imaging_T1_ShMoLLI_DICOM/manual_annotation/val_Alex_final_Emma_final_trainN10_rs1701.csv",
-                "--test_img_list", "/group/glastonbury/soumick/dataset/ukbbnii/minisets/F20204_Liver_Imaging_T1_ShMoLLI_DICOM/manual_annotation/test_Alex_final_Emma_final_trainN10_rs1701.csv",
-                "--targets", "pancreas",
-                "--num_cls", "2",
+                "--train_img_list", "/group/glastonbury/soumick/dataset/ukbbnii/minisets/F20259_Pancreas_Images_ShMoLLI_DICOM/manual_annotation/train_Alex_final_Emma_final_trainN10_rs1701.csv",
+                "--val_img_list", "/group/glastonbury/soumick/dataset/ukbbnii/minisets/F20259_Pancreas_Images_ShMoLLI_DICOM/manual_annotation/val_Alex_final_Emma_final_trainN10_rs1701.csv",
+                "--test_img_list", "/group/glastonbury/soumick/dataset/ukbbnii/minisets/F20259_Pancreas_Images_ShMoLLI_DICOM/manual_annotation/test_Alex_final_Emma_final_trainN10_rs1701.csv",
+                "--targets", "pancreas,liver",
+                "--num_cls", "3",
                 "--out_size", "384",
                 "--slice_index", "2",
                 "--prenorm_type", "window",
@@ -29,8 +29,9 @@
                 "--sam_ckpt", "pretrained_weights/MedicoSAM/vit_b_medicosam.pt",
                 "--run_tag", "prova_initSAM_adapter_slc2_win1to99",
                 "--test_prefinetune",
-                "--seg_save_dir", "/group/glastonbury/soumick/dataset/ukbbnii/minisets/F20204_Liver_Imaging_T1_ShMoLLI_DICOM/segmentations/prova_ftSAM",
-                "--no-load_all"
+                "--seg_save_dir", "/group/glastonbury/soumick/dataset/ukbbnii/minisets/F20259_Pancreas_Images_ShMoLLI_DICOM/segmentations/prova_ftSAM",
+                "--no-load_all",
+                "--store_emb"
             ],
             // "args": [
             //     "--dataset_name", "prova_AlexPlasmaCells_V0",

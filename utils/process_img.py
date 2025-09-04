@@ -71,9 +71,33 @@ def get_images(pth_img, pth_lbl='', slice_index=None, norm_type=None, window_min
         image_data_pre = np.uint8(image_data * 255.0)
 
     if bool(pth_lbl):
-        return image_data_pre, label_data
+        return image_data_pre, label_data, (height, width)
     else:
-        return image_data_pre
+        return image_data_pre, (height, width)
+
+def unpad_arr(padded_arr, prepad_shape):
+    """
+    Crops a padded array back to its original shape.
+
+    Args:
+        padded_arr (torch.Tensor or np.array): The tensor that was padded to be square.
+                                      Shape can be (B, (D,) H, W) or (B, C, (D,) H, W).
+        prepad_shape (tuple or list): The original shape (height, width) before padding.
+
+    Returns:
+        torch.Tensor or np.array: The unpadded (cropped) array.
+    """
+    original_h, original_w = prepad_shape[-2:]
+    padded_h, padded_w = padded_arr.shape[-2:]
+    
+    pad_h_total = padded_h - original_h
+    pad_w_total = padded_w - original_w
+    pad_top = pad_h_total // 2
+    pad_left = pad_w_total // 2
+
+    unpadded_arr = padded_arr[..., pad_top:pad_top + original_h, pad_left:pad_left + original_w]
+
+    return unpadded_arr
 
 def segment_image(image_data, model_demo, prompt, use_otsu=False, keep_largest_only=False, fill_holes=False):
     segs = []

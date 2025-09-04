@@ -108,6 +108,7 @@ def parse_args():
     parser.add_argument('--prompt_region_type', type=str, default='', help='type of prompt region. Options: random, all, largest_k. If empty, no prompts will be generated.')
     parser.add_argument('--no_bbox_input', action=argparse.BooleanOptionalAction, default=False, help='while using bbox-mode (from the perspective of the DS), whether to supply bounding box prompts to the model')
     parser.add_argument('--prompt_dist_thre_ratio', type=float, default=0.1, help='ratio of distance threshold for prompt generation (for bbox, it is the the randomness at each side of box). 0 means always a perfect prompt')
+    parser.add_argument('--store_emb', action=argparse.BooleanOptionalAction, default=False, help='whether to store embeddings during testing')
 
     opt = parser.parse_args()
 

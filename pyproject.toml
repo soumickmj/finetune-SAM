@@ -89,6 +89,7 @@ wrapt = "1.16.0"
 tensorboardx = "^2.6.4"
 openslide-python = "^1.4.2"
 shapely = "^2.1.1"
+h5py = "^3.14.0"
 
 
 [build-system]
