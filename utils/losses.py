@@ -358,3 +358,45 @@ class BoundaryLoss(nn.Module):
         loss = self.boundary_criterion(pred_boundary, gt_boundary)
             
         return loss
+
+def iou_multiclass(pred, true, num_classes, eps=1e-7):
+    """
+    Compute the IoU score between the prediction and target for multi-class segmentation.
+    
+    Args:
+        pred: Predicted masks of shape (B, C, H, W) - logits or probabilities
+        true: Ground truth masks of shape (B, 1, H, W) with class indices
+        num_classes: Number of classes
+        eps: Small epsilon to avoid division by zero
+    
+    Returns:
+        iou: IoU scores of shape (B, C) for each class
+    """
+    # Convert predictions to class predictions
+    if pred.shape[1] > 1:  # Multi-class case
+        pred_mask = torch.softmax(pred, dim=1)  # Convert to probabilities
+        pred_class = torch.argmax(pred_mask, dim=1, keepdim=True)  # Shape: (B, 1, H, W)
+    else:  # Binary case
+        pred_mask = torch.sigmoid(pred)
+        pred_class = (pred_mask > 0.5).long()  # Shape: (B, 1, H, W)
+    
+    # Convert true masks to same format
+    true_class = true.long()  # Shape: (B, 1, H, W)
+    
+    iou_scores = []
+    
+    for class_idx in range(num_classes):
+        # Create binary masks for current class
+        pred_binary = (pred_class == class_idx)  # Shape: (B, 1, H, W)
+        true_binary = (true_class == class_idx)  # Shape: (B, 1, H, W)
+        
+        # Compute intersection and union
+        intersection = torch.logical_and(pred_binary, true_binary).sum(dim=(1, 2, 3))  # Shape: (B,)
+        union = torch.logical_or(pred_binary, true_binary).sum(dim=(1, 2, 3))  # Shape: (B,)
+
+        # Compute IoU for this class
+        iou = (intersection + eps) / (union + eps)  # Shape: (B,)
+        iou_scores.append(iou)
+    
+    # Stack to get shape (B, C)
+    return torch.stack(iou_scores, dim=1)

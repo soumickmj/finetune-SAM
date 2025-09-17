@@ -28,11 +28,6 @@ def parse_args():
     parser.add_argument('--val_img_list', type=str,default='')
     parser.add_argument('--targets', type=str,default='liver')
 
-    parser.add_argument('--loss_mode', type=int, default=0, help='0: original (Dice + CE), 1: Dice + Focal, 2: Tversky + Focal')
-    parser.add_argument('--include_background_loss', action=argparse.BooleanOptionalAction, default=True, help='Default:True. If False, channel index 0 (background category) is excluded from the calculation. if the non-background segmentations are small compared to the total image size they can get overwhelmed by the signal from the background so excluding it in such cases helps convergence.')
-    parser.add_argument('--add_boundary_loss', action=argparse.BooleanOptionalAction, default=False, help='additionally apply boundary loss, Dice computed ')
-    parser.add_argument('--val_dsc_monitor', action=argparse.BooleanOptionalAction, default=True, help='whether to monitor the validation DSC (default) or validation loss')
-
     parser.add_argument('--finetune_type', type=str, default='adapter', help='normalization type, pick among vanilla,adapter,lora')
     parser.add_argument('--normalize_type', type=str, default='sam', help='normalization type, pick between sam or medsam')
     
@@ -112,6 +107,12 @@ def parse_args():
     parser.add_argument('--post_process_mask', action=argparse.BooleanOptionalAction, default=False, help='whether to post-process the mask after prediction')
     parser.add_argument('--post_process_fillholes', action=argparse.BooleanOptionalAction, default=False, help='whether to post-process the mask after prediction by filling holes')
     parser.add_argument('--post_process_largestsegment', action=argparse.BooleanOptionalAction, default=False, help='whether to post-process the mask after prediction by keeping only the largest segment')
+
+    parser.add_argument('--loss_mode', type=int, default=0, help='0: original (Dice + CE), 1: Dice + Focal, 2: Tversky + Focal')
+    parser.add_argument('--include_background_loss', action=argparse.BooleanOptionalAction, default=True, help='Default:True. If False, channel index 0 (background category) is excluded from the calculation. if the non-background segmentations are small compared to the total image size they can get overwhelmed by the signal from the background so excluding it in such cases helps convergence.')
+    parser.add_argument('--add_boundary_loss', action=argparse.BooleanOptionalAction, default=False, help='additionally apply boundary loss, Dice computed ')
+    parser.add_argument('--val_dsc_monitor', action=argparse.BooleanOptionalAction, default=True, help='whether to monitor the validation DSC (default) or validation loss')
+    parser.add_argument('--train_iouhead', action=argparse.BooleanOptionalAction, default=False, help='whether to train the IoU head')
 
     opt = parser.parse_args()
 

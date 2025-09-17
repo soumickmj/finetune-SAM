@@ -28,7 +28,7 @@ import torch.nn.functional as F
 from torch.nn.functional import one_hot
 from pathlib import Path
 from tqdm import tqdm
-from utils.losses import BoundaryLoss
+from utils.losses import BoundaryLoss, iou_multiclass
 from utils.dsc import dice_coeff_multi_class
 import cv2
 import monai
@@ -143,7 +143,7 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
                 boxes=None,
                 masks=None,
             )
-            pred, _ = sam.mask_decoder(
+            pred, iou_pred = sam.mask_decoder(
                             image_embeddings=img_emb,
                             image_pe=sam.prompt_encoder.get_dense_pe(), 
                             sparse_prompt_embeddings=sparse_emb,
@@ -168,7 +168,12 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
             if args.add_boundary_loss:
                 loss_boundary = criterion_boundary(pred, msks)
                 loss += loss_boundary
-            
+
+            if args.train_iouhead:
+                true_iou = iou_multiclass(pred, msks, args.num_cls, eps=1e-7)
+                loss_iouhead = F.mse_loss(iou_pred, true_iou)
+                loss += loss_iouhead
+
             loss.backward()
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
@@ -196,6 +201,8 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
             writer.add_scalar('info/loss_dice', loss_dice, iter_num)
             if args.add_boundary_loss:
                 writer.add_scalar('info/loss_boundary', loss_boundary, iter_num)
+            if args.train_iouhead:
+                writer.add_scalar('info/loss_iouhead', loss_iouhead, iter_num)
 
         train_loss /= (i+1)
         pbar.set_description('Epoch num {}| train loss {} \n'.format(epoch,train_loss))
@@ -216,7 +223,7 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
                         boxes=None,
                         masks=None,
                     )
-                    pred, _ = sam.mask_decoder(
+                    pred, iou_pred = sam.mask_decoder(
                                     image_embeddings=img_emb,
                                     image_pe=sam.prompt_encoder.get_dense_pe(), 
                                     sparse_prompt_embeddings=sparse_emb,
@@ -235,6 +242,10 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
 
                     if args.add_boundary_loss:
                         loss += criterion_boundary(pred, msks)
+
+                    if args.train_iouhead:
+                        true_iou = iou_multiclass(pred, msks, args.num_cls, eps=1e-7)
+                        loss += F.mse_loss(iou_pred, true_iou)
 
                     eval_loss +=loss.item()
                     dsc_batch = dice_coeff_multi_class(pred.argmax(dim=1).cpu(), torch.squeeze(msks,1).cpu(),args.num_cls)
@@ -273,6 +284,15 @@ def train_model(trainloader,valloader,dir_checkpoint,epochs):
                 
                 
 if __name__ == "__main__":
+    # #read the preloaded arguments
+    # args_path = "checkpoints/ftSAM_LivAorSpl/UKB20204_EmmaAlexFinalV0_filtDSrun2N20SAM_adapter_slc0_win1to95_trainiouhead/args.json"
+    # with open(args_path, 'r') as f:
+    #     args_dict = json.load(f)
+    
+    # # Converting dictionary to Namespace
+    # from argparse import Namespace
+    # args = Namespace(**args_dict)
+    
     dataset_name = args.dataset_name
     print('train dataset: {}'.format(dataset_name)) 
     train_img_list = args.train_img_list

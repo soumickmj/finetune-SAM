@@ -29,7 +29,7 @@ import torch.nn.functional as F
 from torch.nn.functional import one_hot
 from pathlib import Path
 from tqdm import tqdm
-from utils.losses import DiceLoss
+from utils.losses import DiceLoss, iou_multiclass
 from utils.dsc import dice_coeff
 import cv2
 import monai
@@ -104,10 +104,12 @@ def main(args,test_image_list):
                 "dense_emb": dense_emb.detach().cpu().numpy()
             })
 
-        iou_storage.append((data['img_name'][0], iou_predictions.cpu().numpy()))
-
         if pred_fine.shape[-1] != args.out_size or pred_fine.shape[-2] != args.out_size: #SAM's output is always 256x256, resize it to the original size
             pred_fine = F.interpolate(pred_fine, size=(args.out_size, args.out_size), mode='bilinear')
+
+        true_iou = iou_multiclass(pred_fine, msks, args.num_cls, eps=1e-7)
+        iou_storage.append((data['img_name'][0], iou_predictions.cpu().numpy(), true_iou.cpu().numpy()))
+
         pred_fine = pred_fine.argmax(dim=1)
 
         if list(pred_fine.shape[-2:]) != [s.item() for s in data['prepad_shape']]:
@@ -155,12 +157,13 @@ def main(args,test_image_list):
     inverse_remapping = {v: k for k, v in test_dataset.remapping_dict.items()}
     labels_to_names = {v: k for k, v in test_dataset.segment_names_to_labels.items()}
     num_iou_cols = iou_storage[0][1].shape[1] # Gets the number of columns in the results
-    iou_column_names = [labels_to_names[inverse_remapping[i]] for i in range(num_iou_cols)]
+    iou_column_names = ["predIOU_"+labels_to_names[inverse_remapping[i]] for i in range(num_iou_cols)]
+    trueiou_column_names = ["trueIOU_"+labels_to_names[inverse_remapping[i]] for i in range(num_iou_cols)]
     data_for_df = [
-        [filename] + list(iou_array.flatten()) 
-        for filename, iou_array in iou_storage
+        [filename] + list(iou_array.flatten()) + list(trueiou_array.flatten())
+        for filename, iou_array, trueiou_array in iou_storage
     ]
-    all_column_names = ['filename'] + iou_column_names
+    all_column_names = ['filename'] + iou_column_names + trueiou_column_names
     iou_df = pd.DataFrame(data_for_df, columns=all_column_names)
     iou_df.to_csv(os.path.join(save_folder,'test_SAM_noRefIOUs.csv'), index=False)
 
@@ -199,7 +202,6 @@ if __name__ == "__main__":
     args_orig.post_process_mask = args.post_process_mask
     args_orig.post_process_fillholes = args.post_process_fillholes
     args_orig.post_process_largestsegment = args.post_process_largestsegment
-
 
     if args.post_process_mask:
         args_orig.proc_tag = 'proc'
