@@ -191,7 +191,7 @@ class Public_dataset(Dataset):
             img_path = img_path.strip()
             mask_path = mask_path.strip()
             img_msk = get_images(pth_img=img_path, pth_lbl=mask_path, slice_index=self.args.slice_index, norm_type=self.args.prenorm_type, window_min_percentile=self.args.prenorm_window_min_percentile, window_max_percentile=self.args.prenorm_window_max_percentile)
-            if isinstance(img_msk, tuple):
+            if len(img_msk)==3:
                 img, msk, prepad_shape = img_msk
             else:
                 img, prepad_shape = img_msk
