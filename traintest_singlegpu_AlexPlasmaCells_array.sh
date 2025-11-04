@@ -67,8 +67,7 @@ train_img_list="/group/glastonbury/yolo_ibd_substructures/train.csv"
 val_img_list="/group/glastonbury/yolo_ibd_substructures/val.csv"
 test_img_list="/group/glastonbury/yolo_ibd_substructures/test.csv"
 label_mapping="/group/glastonbury/yolo_ibd_substructures/classlabel_mapping.pkl"
-out_size="256" #TODO: change it back to 1024 after testing
-echo "Warning: out_size is changed to 256 from the original 1024!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+out_size="1024"
 
 # Target parameters
 #calculate num_cls based on targets by splitting the targets string with comma

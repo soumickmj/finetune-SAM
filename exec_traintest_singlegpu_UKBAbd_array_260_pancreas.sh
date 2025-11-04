@@ -10,22 +10,24 @@
 # Define the parameter values in arrays
 # dsID_list=("254" "204" "259" "260")
 # dsID_list=("204" "259" "260")
-dsID_list=("254")
+dsID_list=("260")
 
-slice_indices=(0 1 2 3)
+# load_all_masks=("True" "False") #whether to drop blank (for the selected classes) masks or not
+load_all_masks=("False") #whether to drop blank (for the selected classes) masks or not
 
-splitTag_list=("Alex_final_Emma_final_trainN10_rs1701" "Alex_final_Emma_final_trainN20_rs1701")
-# splitTag_list=("Alex_final_Emma_final_trainN10_rs1701")
+slice_indices=("2" "4")
 
-init_mode_list=("SAM" "MedSAM" "SSLSAM" "MedicoSAM" "MRIFoundation")
-# init_mode_list=("MRIFoundation")
-# init_mode_list=("SSLSAM")
+# splitTag_list=("Alex_final_Emma_final_trainN10_rs1701" "Alex_final_Emma_final_trainN20_rs1701")
+splitTag_list=("Alex_final_Emma_final_trainN20_rs1701") #there are minor differences between 10 and 20, but 20 always outperformed 10, in some difficult cases with a big margin. 
 
-peft_mode_list=("adapter" "lora")
-# peft_mode_list=("adapter")
+# init_mode_list=("SAM" "MedSAM" "SSLSAM" "MedicoSAM" "MRIFoundation")
+init_mode_list=("SAM" "MedSAM" "MedicoSAM") #SSLSAM and MRIFoundation did perform okay in some cases, but failed completely for others, and always performed worse compared to the other 3.
+
+peft_mode_list=("adapter" "lora") #both are working comparatively. 
 
 # Additional configuration
 dsTag="EmmaAlexFinalV0"
+# targets="liver,gallbladder,kidney,pancreas,aorta,spleen"
 targets="pancreas"
 batch_size="3"
 num_workers="3"
@@ -67,25 +69,27 @@ job_count=0
 # Generate all parameter combinations
 for dsID in "${dsID_list[@]}"; do
   for slice_index in "${slice_indices[@]}"; do
-  for splitTag in "${splitTag_list[@]}"; do
-    for init_mode in "${init_mode_list[@]}"; do
-      for peft_mode in "${peft_mode_list[@]}"; do
-        
-        # Determine expID based on splitTag
-        if [[ "${splitTag}" == *"trainN10"* ]]; then
-          expID="initN10"
-        elif [[ "${splitTag}" == *"trainN20"* ]]; then
-          expID="initN20"
-        else
-          expID="init"
-        fi
+    for splitTag in "${splitTag_list[@]}"; do
+      for init_mode in "${init_mode_list[@]}"; do
+        for peft_mode in "${peft_mode_list[@]}"; do
+          for load_all_mask in "${load_all_masks[@]}"; do
+            
+            # Determine expID based on splitTag
+            if [[ "${splitTag}" == *"trainN10"* ]]; then
+              expID="run2N10"
+            elif [[ "${splitTag}" == *"trainN20"* ]]; then
+              expID="run2N20"
+            else
+              expID="run2"
+            fi
 
-        # Write configuration to file
-          # Format: expID|dsID|dsTag|splitTag|init_mode|peft_mode|targets|batch_size|num_workers|dsRoot|out_type|slice_index
-          echo "${expID}|${dsID}|${dsTag}|${splitTag}|${init_mode}|${peft_mode}|${targets}|${batch_size}|${num_workers}|${dsRoot}|${out_type}|${slice_index}" >> "$config_file"
-        
-        job_count=$((job_count + 1))
-        
+            # Write configuration to file
+            # Format: expID|dsID|dsTag|splitTag|init_mode|peft_mode|targets|batch_size|num_workers|dsRoot|out_type|slice_index|load_all_mask
+            echo "${expID}|${dsID}|${dsTag}|${splitTag}|${init_mode}|${peft_mode}|${targets}|${batch_size}|${num_workers}|${dsRoot}|${out_type}|${slice_index}|${load_all_mask}" >> "$config_file"
+            
+            job_count=$((job_count + 1))
+            
+          done
         done
       done
     done

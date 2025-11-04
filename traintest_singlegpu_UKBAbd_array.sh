@@ -32,8 +32,8 @@ if [ -z "$config_line" ]; then
     exit 1
 fi
 
-# Parse the configuration line (format: expID|dsID|dsTag|splitTag|init_mode|peft_mode|targets|batch_size|num_workers|dsRoot|out_type|slice_index)
-IFS='|' read -r expID dsID dsTag splitTag init_mode peft_mode targets batch_size num_workers dsRoot out_type slice_index <<< "$config_line"
+# Parse the configuration line (format: expID|dsID|dsTag|splitTag|init_mode|peft_mode|targets|batch_size|num_workers|dsRoot|out_type|slice_index|load_all_mask)
+IFS='|' read -r expID dsID dsTag splitTag init_mode peft_mode targets batch_size num_workers dsRoot out_type slice_index load_all_mask <<< "$config_line"
 
 # Set default values if not provided in config
 dsTag="${dsTag:-EmmaAlexFinalV0}"
@@ -42,6 +42,14 @@ batch_size="${batch_size:-3}"
 num_workers="${num_workers:-3}"
 dsRoot="${dsRoot:-/group/glastonbury/soumick/dataset/ukbbnii/minisets}"
 out_type="${out_type:-ftSAM_liver}"
+load_all_mask="${load_all_mask:-True}"
+
+# new loss params
+loss_mode="${loss_mode:-0}" 
+add_boundary_loss="${add_boundary_loss:-False}" 
+include_background_loss="${include_background_loss:-True}" 
+val_dsc_monitor="${val_dsc_monitor:-True}" 
+train_iouhead="${train_iouhead:-True}"
 
 # Fixed params
 arch="vit_b"
@@ -145,6 +153,21 @@ else
 fi
 
 run_tag="${expID}${init_mode}_${peft_mode}_slc${slice_index}_win${prenorm_window_min_percentile}to${prenorm_window_max_percentile}"
+if [ "$load_all_mask" == "False" ]; then
+    run_tag="filtDS${run_tag}"
+fi
+if [ "$add_boundary_loss" == "True" ]; then
+    run_tag="${run_tag}_boundaryloss"
+fi
+if [ "$include_background_loss" == "False" ]; then
+    run_tag="${run_tag}_nobgloss"
+fi
+if [ "$val_dsc_monitor" == "False" ]; then
+    run_tag="${run_tag}_vallossmonitor"
+fi
+if [ "$train_iouhead" == "True" ]; then
+    run_tag="${run_tag}_trainiouhead"
+fi
 
 base_path=$(dirname "$test_img_list")
 base_path="${base_path%/manual_annotation*}" 
@@ -185,7 +208,8 @@ echo "dsTag:                            $dsTag"
 echo "dsRoot:                           $dsRoot"
 echo "splitTag:                         $splitTag"  
 echo "out_type:                         $out_type"
-echo "slice_index:                      $slice_index"  
+echo "slice_index:                      $slice_index"
+echo "load_all_mask:                    $load_all_mask"  
 
 echo "----------------------------------------------------------------------"
 echo "End of variable check."
@@ -207,7 +231,7 @@ bool_to_arg() {
     fi
 }
 
-# Fine-tune the model
+Fine-tune the model
 srun /home/soumick.chatterjee/.local/bin/poetry run python SingleGPU_train_finetune_noprompt.py \
     --dir_checkpoint "checkpoints/${out_type}" \
     $(bool_to_arg "if_warmup" "True") \
@@ -229,10 +253,16 @@ srun /home/soumick.chatterjee/.local/bin/poetry run python SingleGPU_train_finet
     $(bool_to_arg "if_mask_decoder_adapter" "$if_mask_decoder_adapter") \
     $(bool_to_arg "if_encoder_lora_layer" "$if_encoder_lora_layer") \
     $(bool_to_arg "if_decoder_lora_layer" "$if_decoder_lora_layer") \
+    $(bool_to_arg "load_all" "$load_all_mask") \
     --lr "$lr" \
     --b "$batch_size" \
     --w "$num_workers" \
-    --run_tag "$run_tag"
+    --run_tag "$run_tag" \
+    --loss_mode "$loss_mode" \
+    $(bool_to_arg "add_boundary_loss" "$add_boundary_loss") \
+    $(bool_to_arg "train_iouhead" "$train_iouhead") \
+    $(bool_to_arg "include_background_loss" "$include_background_loss") \
+    $(bool_to_arg "val_dsc_monitor" "$val_dsc_monitor") 
 
 # Test before finetuning
 srun /home/soumick.chatterjee/.local/bin/poetry run python val_finetune_noprompt.py \
@@ -243,10 +273,48 @@ srun /home/soumick.chatterjee/.local/bin/poetry run python val_finetune_noprompt
     --seg_save_dir "${seg_save_dir/${run_tag}/prefinetune_${run_tag}}" \
     --run_tag "$run_tag"
 
+# # Validate the fine-tuned model
+# srun /home/soumick.chatterjee/.local/bin/poetry run python val_finetune_noprompt.py \
+#     --dir_checkpoint "checkpoints/${out_type}" \
+#     --dataset_name "$dataset_name" \
+#     --test_img_list "$test_img_list" \
+#     --run_tag "$run_tag" \
+#     --seg_save_dir "$seg_save_dir"
+
 # Validate the fine-tuned model
 srun /home/soumick.chatterjee/.local/bin/poetry run python val_finetune_noprompt.py \
     --dir_checkpoint "checkpoints/${out_type}" \
     --dataset_name "$dataset_name" \
     --test_img_list "$test_img_list" \
     --run_tag "$run_tag" \
-    --seg_save_dir "$seg_save_dir"
+    --seg_save_dir "$seg_save_dir" \
+    $(bool_to_arg "store_emb" "True") \
+    $(bool_to_arg "post_process_mask" "True") \
+    $(bool_to_arg "post_process_fillholes" "True") \
+    $(bool_to_arg "post_process_largestsegment" "False")
+
+# Validate the fine-tuned model
+srun /home/soumick.chatterjee/.local/bin/poetry run python val_finetune_noprompt.py \
+    --dir_checkpoint "checkpoints/${out_type}" \
+    --dataset_name "$dataset_name" \
+    --test_img_list "$test_img_list" \
+    --run_tag "$run_tag" \
+    --seg_save_dir "$seg_save_dir" \
+    $(bool_to_arg "store_emb" "False") \
+    $(bool_to_arg "post_process_mask" "True") \
+    $(bool_to_arg "post_process_fillholes" "True") \
+    $(bool_to_arg "post_process_largestsegment" "True")
+
+# # Infer from HDF5 dataset
+# srun /home/soumick.chatterjee/.local/bin/poetry run python val_finetune_noprompt_h5.py \
+#     --dir_checkpoint "checkpoints/${out_type}" \
+#     --dataset_name "$dataset_name" \
+#     --run_tag "$run_tag" \
+#     --seg_save_dir "$seg_save_dir" \
+#     $(bool_to_arg "store_emb" "False") \
+#     $(bool_to_arg "post_process_mask" "True") \
+#     $(bool_to_arg "post_process_fillholes" "True") \
+#     $(bool_to_arg "post_process_largestsegment" "True")
+#     --h5_path "/scratch/glastonbury/datasets/ukbbH5s/F20204_Liver_Imaging_T1_ShMoLLI_DICOM_H5v3/data.h5" \
+#     --h5_filternames "primary" \
+#     $(bool_to_arg "h5filts_satisfy_all" "True")

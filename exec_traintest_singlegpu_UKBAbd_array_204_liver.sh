@@ -8,31 +8,38 @@
 # ==============================================================================
 
 # Define the parameter values in arrays
-dsID_list=("EmaIBDv0")
+# dsID_list=("254" "204" "259" "260")
+# dsID_list=("204" "259" "260")
+dsID_list=("204")
 
 # load_all_masks=("True" "False") #whether to drop blank (for the selected classes) masks or not
 load_all_masks=("False") #whether to drop blank (for the selected classes) masks or not
 
-splitTag_list=("Tiles")
+slice_indices=("0" "2")
 
-# init_mode_list=("SAM" "MedSAM" "SSLSAM" "PathoSAM")
-init_mode_list=("SAM" "MedSAM" "PathoSAM")
+# splitTag_list=("Alex_final_Emma_final_trainN10_rs1701" "Alex_final_Emma_final_trainN20_rs1701")
+splitTag_list=("Alex_final_Emma_final_trainN20_rs1701") #there are minor differences between 10 and 20, but 20 always outperformed 10, in some difficult cases with a big margin. 
 
-peft_mode_list=("adapter" "lora")
-# peft_mode_list=("adapter")
+# init_mode_list=("SAM" "MedSAM" "SSLSAM" "MedicoSAM" "MRIFoundation")
+# init_mode_list=("SAM" "MedSAM" "MedicoSAM") #SSLSAM and MRIFoundation did perform okay in some cases, but failed completely for others, and always performed worse compared to the other 3.
+init_mode_list=("SAM" "MedicoSAM") #SSLSAM and MRIFoundation did perform okay in some cases, but failed completely for others, and always performed worse compared to the other 3.
+
+# peft_mode_list=("adapter" "lora") #both are working comparatively. 
+peft_mode_list=("lora") #both are working comparatively. 
 
 # Additional configuration
-dsTag="EmaIBDTilesV0"
-targets="Lamina_propria,Crypt,Muscle,Surface"
+dsTag="EmmaAlexFinalV0"
+# targets="liver,gallbladder,kidney,pancreas,aorta,spleen"
+targets="liver"
 batch_size="3"
 num_workers="3"
-dsRoot="/group/glastonbury/yolo_ibd_substructures"
-out_type="ftSAM_easy4"  # Name of the segmentation folder, as well as checkpoint folder 
+dsRoot="/group/glastonbury/soumick/dataset/ukbbnii/minisets"
+out_type="ftSAM_liver"  # Name of the segmentation folder, as well as checkpoint folder 
 
 # SLURM array job settings
-max_concurrent_jobs=20  # Maximum number of jobs to run simultaneously
-walltime="30-00:00:0"      # Job walltime
-memory_per_cpu="3000Mb" # Memory per CPU
+max_concurrent_jobs=10  # Maximum number of jobs to run simultaneously
+walltime="5:00:0"      # Job walltime
+memory_per_cpu="2000Mb" # Memory per CPU
 partition="gpuq"        # SLURM partition
 mail_user="soumick.chatterjee@fht.org"
 
@@ -43,7 +50,7 @@ mail_user="soumick.chatterjee@fht.org"
 # Generate timestamp for unique filenames
 timestamp=$(date +"%Y%m%d_%H%M%S")
 config_file="job_config_${timestamp}.txt"
-log_dir="/group/glastonbury/yolo_ibd_substructures/SLURM/${out_type}"
+log_dir="/group/glastonbury/soumick/SLURM/${out_type}"
 mkdir -p "$log_dir"
 
 echo "========================================================================"
@@ -63,19 +70,28 @@ job_count=0
 
 # Generate all parameter combinations
 for dsID in "${dsID_list[@]}"; do
-  for splitTag in "${splitTag_list[@]}"; do
-    for init_mode in "${init_mode_list[@]}"; do
-      for peft_mode in "${peft_mode_list[@]}"; do
-        for load_all_mask in "${load_all_masks[@]}"; do
-        
-        expID="init"
+  for slice_index in "${slice_indices[@]}"; do
+    for splitTag in "${splitTag_list[@]}"; do
+      for init_mode in "${init_mode_list[@]}"; do
+        for peft_mode in "${peft_mode_list[@]}"; do
+          for load_all_mask in "${load_all_masks[@]}"; do
+            
+            # Determine expID based on splitTag
+            if [[ "${splitTag}" == *"trainN10"* ]]; then
+              expID="run2N10"
+            elif [[ "${splitTag}" == *"trainN20"* ]]; then
+              expID="run2N20"
+            else
+              expID="run2"
+            fi
 
-        # Write configuration to file
-          # Format: expID|dsID|dsTag|splitTag|init_mode|peft_mode|targets|batch_size|num_workers|dsRoot|out_type|load_all_mask
-          echo "${expID}|${dsID}|${dsTag}|${splitTag}|${init_mode}|${peft_mode}|${targets}|${batch_size}|${num_workers}|${dsRoot}|${out_type}|${load_all_mask}" >> "$config_file"
-        
-        job_count=$((job_count + 1))
-        
+            # Write configuration to file
+            # Format: expID|dsID|dsTag|splitTag|init_mode|peft_mode|targets|batch_size|num_workers|dsRoot|out_type|slice_index|load_all_mask
+            echo "${expID}|${dsID}|${dsTag}|${splitTag}|${init_mode}|${peft_mode}|${targets}|${batch_size}|${num_workers}|${dsRoot}|${out_type}|${slice_index}|${load_all_mask}" >> "$config_file"
+            
+            job_count=$((job_count + 1))
+            
+          done
         done
       done
     done
@@ -129,7 +145,7 @@ sbatch_cmd=(
     --mail-type=ALL
     --mail-user="$mail_user"
     --export="CONFIG_FILE=$config_file"
-    traintest_singlegpu_EmaIBD_array.sh
+    traintest_singlegpu_UKBAbd_array.sh
 )
 
 # Ask for confirmation before submitting

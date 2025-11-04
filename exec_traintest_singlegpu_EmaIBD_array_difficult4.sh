@@ -10,9 +10,14 @@
 # Define the parameter values in arrays
 dsID_list=("EmaIBDv0")
 
+# load_all_masks=("True" "False") #whether to drop blank (for the selected classes) masks or not
+load_all_masks=("False") #whether to drop blank (for the selected classes) masks or not
+
 splitTag_list=("Tiles")
 
-init_mode_list=("SAM" "MedSAM" "SSLSAM" "PathoSAM")
+# init_mode_list=("SAM" "MedSAM" "SSLSAM" "PathoSAM")
+# init_mode_list=("SAM" "MedSAM" "PathoSAM")
+init_mode_list=("SAM" "PathoSAM")
 
 peft_mode_list=("adapter" "lora")
 # peft_mode_list=("adapter")
@@ -23,12 +28,12 @@ targets="Granuloma,Granulation_tissue,Lymphoid_follicle_or_aggregates,Submucosa"
 batch_size="3"
 num_workers="3"
 dsRoot="/group/glastonbury/yolo_ibd_substructures"
-out_type="ftSAM_difficult4"  # Name of the segmentation folder, as well as checkpoint folder 
+out_type="ftSAM_difficult4_256"  # Name of the segmentation folder, as well as checkpoint folder  #TODO: remove 256 from the name after testing
 
 # SLURM array job settings
 max_concurrent_jobs=20  # Maximum number of jobs to run simultaneously
-walltime="5-00:00:0"      # Job walltime
-memory_per_cpu="4000Mb" # Memory per CPU
+walltime="30-00:00:0"      # Job walltime
+memory_per_cpu="3000Mb" # Memory per CPU
 partition="gpuq"        # SLURM partition
 mail_user="soumick.chatterjee@fht.org"
 
@@ -62,15 +67,17 @@ for dsID in "${dsID_list[@]}"; do
   for splitTag in "${splitTag_list[@]}"; do
     for init_mode in "${init_mode_list[@]}"; do
       for peft_mode in "${peft_mode_list[@]}"; do
+        for load_all_mask in "${load_all_masks[@]}"; do
         
         expID="init"
 
         # Write configuration to file
-        # Format: expID|dsID|dsTag|splitTag|init_mode|peft_mode|targets|batch_size|num_workers|dsRoot|out_type
-        echo "${expID}|${dsID}|${dsTag}|${splitTag}|${init_mode}|${peft_mode}|${targets}|${batch_size}|${num_workers}|${dsRoot}|${out_type}" >> "$config_file"
+          # Format: expID|dsID|dsTag|splitTag|init_mode|peft_mode|targets|batch_size|num_workers|dsRoot|out_type|load_all_mask
+          echo "${expID}|${dsID}|${dsTag}|${splitTag}|${init_mode}|${peft_mode}|${targets}|${batch_size}|${num_workers}|${dsRoot}|${out_type}|${load_all_mask}" >> "$config_file"
         
         job_count=$((job_count + 1))
         
+        done
       done
     done
   done

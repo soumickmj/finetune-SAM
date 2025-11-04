@@ -104,6 +104,7 @@ def parse_args():
     parser.add_argument('--no_bbox_input', action=argparse.BooleanOptionalAction, default=False, help='while using bbox-mode (from the perspective of the DS), whether to supply bounding box prompts to the model')
     parser.add_argument('--prompt_dist_thre_ratio', type=float, default=0.1, help='ratio of distance threshold for prompt generation (for bbox, it is the the randomness at each side of box). 0 means always a perfect prompt')
     parser.add_argument('--store_emb', action=argparse.BooleanOptionalAction, default=False, help='whether to store embeddings during testing')
+    parser.add_argument('--storepred_npy', action=argparse.BooleanOptionalAction, default=False, help='whether to store predicted masks as a single numpy array at the end of testing (very memory-heavy)')
     parser.add_argument('--post_process_mask', action=argparse.BooleanOptionalAction, default=False, help='whether to post-process the mask after prediction')
     parser.add_argument('--post_process_fillholes', action=argparse.BooleanOptionalAction, default=False, help='whether to post-process the mask after prediction by filling holes')
     parser.add_argument('--post_process_largestsegment', action=argparse.BooleanOptionalAction, default=False, help='whether to post-process the mask after prediction by keeping only the largest segment')
@@ -114,6 +115,10 @@ def parse_args():
     parser.add_argument('--val_dsc_monitor', action=argparse.BooleanOptionalAction, default=True, help='whether to monitor the validation DSC (default) or validation loss')
     parser.add_argument('--train_iouhead', action=argparse.BooleanOptionalAction, default=False, help='whether to train the IoU head')
 
+    #params related to the HDF5 dataset (so far, only for inference)
+    parser.add_argument('--h5_path', type=str, default='/scratch/glastonbury/datasets/ukbbH5s/F20204_Liver_Imaging_T1_ShMoLLI_DICOM_H5v3/data.h5', help='path to the HDF5 dataset')
+    parser.add_argument('--h5_filternames', type=str, default='primary', help='comma-separated list of image names to filter')
+    parser.add_argument('--h5filts_satisfy_all', action=argparse.BooleanOptionalAction, default=True, help='whether all filter names must be present')
     opt = parser.parse_args()
 
     return opt

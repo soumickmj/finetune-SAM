@@ -3,7 +3,7 @@ from models.sam import SamPredictor, sam_model_registry
 from models.sam.utils.transforms import ResizeLongestSide
 from skimage.measure import label
 from models.sam_LoRa import LoRA_Sam
-#Scientific computing 
+#Scientific computing
 import numpy as np
 import os
 import pandas as pd
@@ -39,13 +39,13 @@ from argparse import Namespace
 import json
 from utils.process_img import unpad_arr, save_image, post_process_mask, create_overlay
 
-cfg.set_seed(1701)  # Set a fixed seed for reproducibility
+cfg.set_seed(1701) # Set a fixed seed for reproducibility
 
 def main(args,test_image_list):
     # change to 'combine_all' if you want to combine all targets into 1 cls
     test_dataset = Public_dataset(args,args.img_folder, args.mask_folder, test_image_list,phase='test',targets=args.targets,if_prompt=False,delete_empty_masks=False) #for testing, we will consider all the samples (including empty masks)
     testloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1)
-    
+
     if args.test_prefinetune:
         print('Testing pre-finetuned model..')
         if args.test_tag:
@@ -60,7 +60,7 @@ def main(args,test_image_list):
             sam = sam_model_registry[args.arch](args,checkpoint=os.path.join(args.sam_ckpt),num_classes=args.num_cls)
             sam_fine_tune = LoRA_Sam(args,sam,r=4).to('cuda').sam
             sam_fine_tune.load_state_dict(torch.load(args.dir_checkpoint + '/checkpoint_best.pth'), strict = False)
-        
+
     sam_fine_tune = sam_fine_tune.to('cuda').eval()
     class_iou = torch.zeros(args.num_cls,dtype=torch.float)
     cls_dsc = torch.zeros(args.num_cls,dtype=torch.float)
@@ -68,7 +68,7 @@ def main(args,test_image_list):
     img_name_list = []
     pred_msk = []
 
-    if bool(args.seg_save_dir):        
+    if bool(args.seg_save_dir):
         os.makedirs(args.seg_save_dir, exist_ok=True)
 
     emb_storage = []
@@ -84,18 +84,18 @@ def main(args,test_image_list):
             img_emb= sam_fine_tune.image_encoder(imgs)
 
             sparse_emb, dense_emb = sam_fine_tune.prompt_encoder(
-            points=None,
-            boxes=None,
-            masks=None,
-        )
+                points=None,
+                boxes=None,
+                masks=None,
+            )
             pred_fine, iou_predictions = sam_fine_tune.mask_decoder(
-                            image_embeddings=img_emb,
-                            image_pe=sam_fine_tune.prompt_encoder.get_dense_pe(), 
-                            sparse_prompt_embeddings=sparse_emb,
-                            dense_prompt_embeddings=dense_emb, 
-                            multimask_output=True,
-                          )
-            
+                image_embeddings=img_emb,
+                image_pe=sam_fine_tune.prompt_encoder.get_dense_pe(),
+                sparse_prompt_embeddings=sparse_emb,
+                dense_prompt_embeddings=dense_emb,
+                multimask_output=True,
+            )
+
         if args.store_emb:
             emb_storage.append({
                 "image_name": data['img_name'][0],
@@ -113,7 +113,7 @@ def main(args,test_image_list):
         pred_fine = pred_fine.argmax(dim=1)
 
         if list(pred_fine.shape[-2:]) != [s.item() for s in data['prepad_shape']]:
-            pred_fine = unpad_arr(pred_fine, [s.item() for s in data['prepad_shape']]) 
+            pred_fine = unpad_arr(pred_fine, [s.item() for s in data['prepad_shape']])
             msks = unpad_arr(msks, [s.item() for s in data['prepad_shape']])
 
         if bool(args.seg_save_dir):
@@ -155,11 +155,51 @@ def main(args,test_image_list):
         np.save(os.path.join(save_folder,'test_masks.npy'),np.concatenate(pred_msk,axis=0))
         np.save(os.path.join(save_folder,'test_name.npy'),np.concatenate(np.expand_dims(img_name_list,0),axis=0))
 
+    # DEBUG PRINTS
+    print("=" * 80)
+    print("DEBUG: Remapping Information")
+    print("=" * 80)
+    print(f"test_dataset.remapping_dict: {test_dataset.remapping_dict}")
+    print(f"test_dataset.segment_names_to_labels: {test_dataset.segment_names_to_labels}")
+    
     inverse_remapping = {v: k for k, v in test_dataset.remapping_dict.items()}
     labels_to_names = {v: k for k, v in test_dataset.segment_names_to_labels.items()}
+    
+    print(f"inverse_remapping: {inverse_remapping}")
+    print(f"labels_to_names: {labels_to_names}")
+    print(f"num_iou_cols: {iou_storage[0][1].shape[1]}")
+    print(f"args.num_cls: {args.num_cls}")
+    print(f"Range being accessed: {list(range(iou_storage[0][1].shape[1]))}")
+    print("=" * 80)
+    
     num_iou_cols = iou_storage[0][1].shape[1] # Gets the number of columns in the results
-    iou_column_names = ["predIOU_"+labels_to_names[inverse_remapping[i]] for i in range(num_iou_cols)]
-    trueiou_column_names = ["trueIOU_"+labels_to_names[inverse_remapping[i]] for i in range(num_iou_cols)]
+    
+    # Try to build column names with error handling
+    iou_column_names = []
+    trueiou_column_names = []
+    for i in range(num_iou_cols):
+        print(f"Processing index {i}:")
+        if i in inverse_remapping:
+            remapped_val = inverse_remapping[i]
+            print(f"  inverse_remapping[{i}] = {remapped_val}")
+            if remapped_val in labels_to_names:
+                label_name = labels_to_names[remapped_val]
+                print(f"  labels_to_names[{remapped_val}] = {label_name}")
+                iou_column_names.append(f"predIOU_{label_name}")
+                trueiou_column_names.append(f"trueIOU_{label_name}")
+            else:
+                print(f"  WARNING: {remapped_val} not in labels_to_names, using index {i}")
+                iou_column_names.append(f"predIOU_class_{i}")
+                trueiou_column_names.append(f"trueIOU_class_{i}")
+        else:
+            print(f"  WARNING: {i} not in inverse_remapping, using index {i}")
+            iou_column_names.append(f"predIOU_class_{i}")
+            trueiou_column_names.append(f"trueIOU_class_{i}")
+    
+    print(f"Generated iou_column_names: {iou_column_names}")
+    print(f"Generated trueiou_column_names: {trueiou_column_names}")
+    print("=" * 80)
+    
     data_for_df = [
         [filename] + list(iou_array.flatten()) + list(trueiou_array.flatten())
         for filename, iou_array, trueiou_array in iou_storage
@@ -176,25 +216,25 @@ def main(args,test_image_list):
                 group.create_dataset("sparse_emb", data=item["sparse_emb"])
                 group.create_dataset("dense_emb", data=item["dense_emb"])
 
-    print(dataset_name)      
-    print('class dsc:',cls_dsc)      
+    print(dataset_name)
+    print('class dsc:',cls_dsc)
     print('class iou:',class_iou)
 
 if __name__ == "__main__":
     args = cfg.prepare_args(cfg.parse_args())
-    cfg.set_seed(args.seed)  # Set a fixed seed for reproducibility (again, to use the supplied seed)
+    cfg.set_seed(args.seed) # Set a fixed seed for reproducibility (again, to use the supplied seed)
 
     dataset_name = args.dataset_name
     print('train dataset: {}'.format(dataset_name))
-    
+
     args_path = f"{args.dir_checkpoint}/args.json"
 
     # Reading the args from the json file
     with open(args_path, 'r') as f:
         args_dict = json.load(f)
-    
+
     # Converting dictionary to Namespace
-    args_orig = Namespace(**args_dict)        
+    args_orig = Namespace(**args_dict)
     args_orig.test_img_list = args.test_img_list
     args_orig.seg_save_dir = args.seg_save_dir
     args_orig.test_prefinetune = args.test_prefinetune
@@ -213,7 +253,7 @@ if __name__ == "__main__":
         if args.post_process_largestsegment:
             args_orig.proc_tag += '_largestseg'
         os.makedirs(os.path.join(args_orig.seg_save_dir, args_orig.proc_tag), exist_ok=True)
-    
+
     if args_orig.seed != args.seed:
         print(f"Warning: The seed in the config file ({args_orig.seed}) does not match the one provided ({args.seed}). Using the provided seed.")
 

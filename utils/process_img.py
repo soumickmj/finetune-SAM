@@ -5,6 +5,7 @@ from skimage.measure import label as skLabel
 from skimage.morphology import remove_small_objects, binary_closing, disk
 from scipy.ndimage import label, binary_fill_holes
 import matplotlib
+import h5py
 
 def get_images(pth_img, pth_lbl='', slice_index=None, norm_type=None, window_min_percentile=1, window_max_percentile=99):
     file_sitk = sitk.ReadImage(pth_img)
@@ -75,6 +76,75 @@ def get_images(pth_img, pth_lbl='', slice_index=None, norm_type=None, window_min
     else:
         return image_data_pre, (height, width)
 
+def read_h5_data(h5_path, dataset_path, pth_lbl=None, slice_index=None, norm_type=None, window_min_percentile=1, window_max_percentile=99):
+    with h5py.File(h5_path, 'r', swmr=True) as h5_file:
+        image_data = h5_file[dataset_path][:].squeeze()
+
+    if np.iscomplexobj(image_data):
+        image_data = np.abs(image_data) #we, for now, care only about the magnitude
+
+    if bool(pth_lbl):
+        with h5py.File(pth_lbl, 'r', swmr=True) as h5_file:
+            label_data = h5_file[dataset_path][:].squeeze()
+    
+    if slice_index not in [None, -1]:
+        image_data = image_data[..., slice_index, :, :].squeeze()
+        if bool(pth_lbl):
+            label_data = label_data[..., slice_index, :, :].squeeze()
+
+    # Check if the last 2 dimensions are not identical and pad to make it a perfect square
+    height, width = image_data.shape[-2], image_data.shape[-1]
+    if height != width:
+        # Calculate padding needed to make it square
+        max_dim = max(height, width)
+        pad_height = max_dim - height
+        pad_width = max_dim - width
+        
+        # Apply padding to the last two dimensions
+        if len(image_data.shape) == 2:
+            # 2D image
+            image_data = np.pad(image_data, 
+                                ((pad_height//2, pad_height - pad_height//2), 
+                                (pad_width//2, pad_width - pad_width//2)), 
+                                mode='constant', constant_values=0)
+            if bool(pth_lbl):
+                label_data = np.pad(label_data, 
+                                    ((pad_height//2, pad_height - pad_height//2), 
+                                    (pad_width//2, pad_width - pad_width//2)), 
+                                    mode='constant', constant_values=0)
+        elif len(image_data.shape) == 3:
+            # 3D image (multiple slices)
+            image_data = np.pad(image_data, 
+                                ((0, 0), 
+                                (pad_height//2, pad_height - pad_height//2), 
+                                (pad_width//2, pad_width - pad_width//2)), 
+                                mode='constant', constant_values=0)
+            if bool(pth_lbl):
+                label_data = np.pad(label_data, 
+                                    ((0, 0), 
+                                    (pad_height//2, pad_height - pad_height//2), 
+                                    (pad_width//2, pad_width - pad_width//2)), 
+                                    mode='constant', constant_values=0)
+
+    # normalise to [0, 255]    
+    if norm_type is not None:
+        if norm_type == "minmax": # Method 0: Simple normalisation with Min/Max scaling
+            image_data_pre = np.uint8((image_data - np.min(image_data)) / (np.max(image_data) - np.min(image_data)) * 255.0)
+        elif norm_type == "window":  # Method 1: Window/Level adjustment (like CT/MRI viewing)
+            lower_bound = np.percentile(image_data[image_data > 0], window_min_percentile) if np.any(image_data > 0) else 0
+            upper_bound = np.percentile(image_data, window_max_percentile)
+            image_data_windowed = np.clip(image_data, lower_bound, upper_bound)
+            image_data_pre = np.uint8((image_data_windowed - lower_bound) / (upper_bound - lower_bound) * 255.0)
+        else:
+            raise ValueError("Unsupported normalisation type: {}".format(norm_type))
+    else:
+        image_data_pre = np.uint8(image_data * 255.0)
+
+    if bool(pth_lbl):
+        return image_data_pre, label_data, (height, width)
+    else:
+        return image_data_pre, (height, width)
+    
 def unpad_arr(padded_arr, prepad_shape):
     """
     Crops a padded array back to its original shape.
