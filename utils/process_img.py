@@ -89,6 +89,7 @@ def read_h5_data(h5_path, dataset_path, pth_lbl=None, slice_index=None, norm_typ
     
     if slice_index not in [None, -1]:
         image_data = image_data[..., slice_index, :, :].squeeze()
+        
         if bool(pth_lbl):
             label_data = label_data[..., slice_index, :, :].squeeze()
 

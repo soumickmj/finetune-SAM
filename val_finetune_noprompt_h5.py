@@ -68,15 +68,10 @@ def main(args,test_image_list):
     img_name_list = []
     # pred_msk = []
 
-    if not args.post_process_mask:
-        args.proc_tag = ''
-
-    os.makedirs(os.path.join(args.seg_save_dir, args.proc_tag), exist_ok=True)
-
     emb_storage = []
     iou_storage = []
-    
-    with h5py.File(os.path.join(args.seg_save_dir, args.proc_tag, 'seg.h5'), 'w') as f:
+
+    with h5py.File(args.out_h5_path, 'w') as f:
         for i,data in enumerate(tqdm(testloader)):
             imgs = data['image'].to('cuda')
             # msks = torchvision.transforms.Resize((args.out_size,args.out_size),InterpolationMode.NEAREST)(data['mask'])
@@ -110,8 +105,7 @@ def main(args,test_image_list):
             if pred_fine.shape[-1] != args.out_size or pred_fine.shape[-2] != args.out_size: #SAM's output is always 256x256, resize it to the original size
                 pred_fine = F.interpolate(pred_fine, size=(args.out_size, args.out_size), mode='bilinear')
 
-            # true_iou = iou_multiclass(pred_fine, msks, args.num_cls, eps=1e-7)
-            iou_storage.append((data['ds_path'][0], iou_predictions.cpu().numpy(), [-1]*args.num_cls)) #placeholder for true iou, which we don't compute here since we don't have the masks
+            iou_storage.append((data['ds_path'][0], iou_predictions.cpu().numpy())) 
 
             pred_fine = pred_fine.argmax(dim=1)
 
@@ -119,7 +113,7 @@ def main(args,test_image_list):
                 pred_fine = unpad_arr(pred_fine, [s.item() for s in data['prepad_shape']]) 
                 # msks = unpad_arr(msks, [s.item() for s in data['prepad_shape']])
 
-            if bool(args.seg_save_dir):
+            if bool(args.out_h5_path):
                 pred_mask = np.squeeze(pred_fine.cpu().numpy())
                 pred_mask = test_dataset.mask_unremapper(pred_mask) #if we have re-mapped the IDs inside the dataset, we need to invert the operation now
                 if args.post_process_mask:
@@ -165,12 +159,11 @@ def main(args,test_image_list):
     labels_to_names = {v: k for k, v in test_dataset.segment_names_to_labels.items()}
     num_iou_cols = iou_storage[0][1].shape[1] # Gets the number of columns in the results
     iou_column_names = ["predIOU_"+labels_to_names[inverse_remapping[i]] for i in range(num_iou_cols)]
-    trueiou_column_names = ["trueIOU_"+labels_to_names[inverse_remapping[i]] for i in range(num_iou_cols)]
     data_for_df = [
-        [filename] + list(iou_array.flatten()) + list(trueiou_array.flatten())
-        for filename, iou_array, trueiou_array in iou_storage
+        [filename] + list(iou_array.flatten()) 
+        for filename, iou_array in iou_storage
     ]
-    all_column_names = ['filename'] + iou_column_names + trueiou_column_names
+    all_column_names = ['filename'] + iou_column_names 
     iou_df = pd.DataFrame(data_for_df, columns=all_column_names)
     iou_df.to_csv(os.path.join(save_folder,'test_SAM_noRefIOUs.csv'), index=False)
 
@@ -211,16 +204,31 @@ if __name__ == "__main__":
     args_orig.post_process_largestsegment = args.post_process_largestsegment
 
     args_orig.h5_path = args.h5_path
+    args_orig.h5_gt_file = args.h5_gt_file
     args_orig.h5_filternames = args.h5_filternames
     args_orig.h5filts_satisfy_all = args.h5filts_satisfy_all
+    args_orig.h5_filtershape = args.h5_filtershape
+    args_orig.out_h5_path = args.out_h5_path
 
-    if args.post_process_mask:
+     # Create processing subfolder if any post-processing is selected
+
+    if args.post_process_mask and bool(args_orig.seg_save_dir):
         args_orig.proc_tag = 'proc'
         if args.post_process_fillholes:
             args_orig.proc_tag += '_fillholes'
         if args.post_process_largestsegment:
             args_orig.proc_tag += '_largestseg'
-        os.makedirs(os.path.join(args_orig.seg_save_dir, args_orig.proc_tag), exist_ok=True)
+        args_orig.seg_save_dir = os.path.join(args_orig.seg_save_dir, args_orig.proc_tag)
+
+    if bool(args_orig.out_h5_path):
+        path_to_json = args_orig.out_h5_path.replace('.h5', '_args_seginfer_ftSAM.json')
+        args_dict = vars(args_orig)
+        with open(path_to_json, 'w', encoding='utf-8') as json_file:
+            json.dump(args_dict, json_file, indent=4)
+
+    if not bool(args_orig.out_h5_path) and bool(args_orig.seg_save_dir):
+        os.makedirs(args_orig.seg_save_dir, exist_ok=True)
+        args_orig.out_h5_path = os.path.join(args_orig.seg_save_dir, 'seg.h5')    
     
     if args_orig.seed != args.seed:
         print(f"Warning: The seed in the config file ({args_orig.seed}) does not match the one provided ({args.seed}). Using the provided seed.")

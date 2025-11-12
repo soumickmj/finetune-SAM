@@ -14,34 +14,39 @@ import SimpleITK as sitk
 #from .utils.transforms import ResizeLongestSide
 from utils.process_img import read_h5_data
 
-def recursive_read_h5(group, path="", filter_names=None, satisfy_all_filts=True):
+def recursive_read_h5(group, path="", filter_names=None, filter_shape=None, satisfy_all_filts=True):
     ds_ls = []
+
+    def check_shape(current_path, ds_shape, filter_shape):
+        if bool(filter_shape) and ds_shape != filter_shape:
+            print("Skipping dataset:", current_path, " due to shape mismatch:", ds_shape)
+            return False
+        return True
     
     for key in group.keys():
         current_path = f"{path}/{key}" if path else key
         item = group[key]
         
         if isinstance(item, h5py.Dataset):
-            # It's a dataset, check if it matches the filter(s)
-            if filter_names is None:
+            if filter_names is None and check_shape(current_path, item.shape, filter_shape):
                 ds_ls.append(current_path)
             elif isinstance(filter_names, str):
                 # Single filter name
-                if filter_names in current_path:
+                if filter_names in current_path and check_shape(current_path, item.shape, filter_shape):
                     ds_ls.append(current_path)
             elif isinstance(filter_names, list):
                 # Multiple filter names
                 if satisfy_all_filts:
                     # All filter names must be present
-                    if all(filter_name in current_path for filter_name in filter_names):
+                    if all(filter_name in current_path for filter_name in filter_names) and check_shape(current_path, item.shape, filter_shape):
                         ds_ls.append(current_path)
                 else:
                     # Any filter name can be present
-                    if any(filter_name in current_path for filter_name in filter_names):
+                    if any(filter_name in current_path for filter_name in filter_names) and check_shape(current_path, item.shape, filter_shape):
                         ds_ls.append(current_path)
         elif isinstance(item, h5py.Group):
             # It's a group, recurse into it
-            nested_datasets = recursive_read_h5(item, current_path, filter_names, satisfy_all_filts)
+            nested_datasets = recursive_read_h5(group=item, path=current_path, filter_names=filter_names, satisfy_all_filts=satisfy_all_filts, filter_shape=filter_shape)
             ds_ls.extend(nested_datasets)
 
     return ds_ls
@@ -130,12 +135,14 @@ class Public_H5dataset(Dataset):
     def process_hd5(self):
         with h5py.File(self.h5_path, 'r', swmr=True) as h5_file:
 
-            self.data_list = recursive_read_h5(h5_file, filter_names=self.args.h5_filternames.split(','), satisfy_all_filts=self.args.h5filts_satisfy_all)
+            self.data_list = recursive_read_h5(h5_file, filter_names=self.args.h5_filternames.split(','), satisfy_all_filts=self.args.h5filts_satisfy_all, filter_shape=self.args.h5_filtershape)
             print(f'Filtered data list to {len(self.data_list)} entries.')
 
     def process_hdf5_label(self):
-        if os.path.exists(self.args.h5_path.replace('data.h5','meta_mask.h5')):
-            self.mask_h5_path = self.args.h5_path.replace('data.h5','meta_mask.h5')
+        h5_file_name = os.path.basename(self.h5_path)
+        if bool(self.args.h5_gt_file) and os.path.exists(self.args.h5_path.replace(h5_file_name, self.args.h5_gt_file)):
+            print("Warning! Untested feature is being executed!!! Ground truth mask file provided, loading masks for evaluation.")
+            self.mask_h5_path = self.args.h5_path.replace(h5_file_name, self.args.h5_gt_file)
             with h5py.File(self.mask_h5_path, 'r', swmr=True) as h5_file:
                 mask_list = recursive_read_h5(h5_file)
                 print(f'{len(mask_list)} masks found.')

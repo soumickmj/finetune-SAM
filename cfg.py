@@ -117,8 +117,11 @@ def parse_args():
 
     #params related to the HDF5 dataset (so far, only for inference)
     parser.add_argument('--h5_path', type=str, default='/scratch/glastonbury/datasets/ukbbH5s/F20204_Liver_Imaging_T1_ShMoLLI_DICOM_H5v3/data.h5', help='path to the HDF5 dataset')
+    parser.add_argument('--h5_gt_file', type=str, default='', help='Path to a mask file present in the same folder as the HDF5 dataset. If supplied (e.g. meta_mask.h5), the ground truth masks will be loaded from this file for evaluation. If empty, no evaluation will be performed.')
     parser.add_argument('--h5_filternames', type=str, default='primary', help='comma-separated list of image names to filter')
     parser.add_argument('--h5filts_satisfy_all', action=argparse.BooleanOptionalAction, default=True, help='whether all filter names must be present')
+    parser.add_argument('--h5_filtershape', type=str, default=None, help='Comma-separated shape filter in the form dim1,dim2,... . Leave to None to not filter by shape.')
+    parser.add_argument('--out_h5_path', type=str, default='', help='Where to store the output segmentation. If not supplied, it will be storred inside the seg_save_dir, under the processing subfolders (if selected)')
     opt = parser.parse_args()
 
     return opt
@@ -128,6 +131,8 @@ def prepare_args(args):
     if args.targets:
         args.targets = args.targets.split(',')
         assert args.num_cls == len(args.targets) + 1, "num_cls should be equal to the number of targets + 1 (for background)"
+    if bool(args.h5_filtershape):
+        args.h5_filtershape = tuple([int(x) for x in args.h5_filtershape.split(',')])
     return args
 
 def set_seed(seed=1701):
