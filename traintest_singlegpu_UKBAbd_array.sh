@@ -2,8 +2,8 @@
 #SBATCH --job-name=ftSAM_array
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=soumick.chatterjee@fht.org
-#SBATCH --partition=gpu-interactive      # type of node we are using (cpuq or gpuq, this is not meant for interactive nodes)
-#SBATCH --time=10:00:0      # walltime
+#SBATCH --partition=gpuq      # type of node we are using (cpuq or gpuq, this is not meant for interactive nodes)
+#SBATCH --time=15-00:00:0      # walltime
 #SBATCH --nodes=1             # number of nodes to be used
 #SBATCH --ntasks-per-node=1   # number of tasks to run per node
 #SBATCH --cpus-per-task=3     # number of CPUs per task (set it to greater than the number of workers, I would go for +1)
@@ -149,7 +149,7 @@ elif [ "$dsID" == "259" ]; then
     infer_h5path="${infer_h5root}/F20259_Pancreas_Images_ShMoLLI_DICOM_H5v3/data.h5"
     h5_filternames="primary"
     h5_filtershape="7,1,1,288,384"
-    slice_index="${slice_index:-1}"
+    slice_index="${slice_index:-2}"
     prenorm_type="window"
     prenorm_window_min_percentile="1"
     prenorm_window_max_percentile="95"
